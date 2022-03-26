@@ -1,4 +1,7 @@
-use embedded_hal::blocking::spi::{Transfer, Write};
+use embedded_hal::{
+    blocking::spi::{Transfer, Write},
+    digital::v2::OutputPin,
+};
 
 use crate::command::Command;
 
@@ -23,38 +26,62 @@ impl From<Address> for u32 {
     }
 }
 
-impl From<Address> for [u8; 3] {
-    fn from(addr: Address) -> [u8; 3] {
-        let val: u32 = addr.into();
-        let bytes: [u8; 4] = val.to_be_bytes();
-        [bytes[0], bytes[1], bytes[2]]
-    }
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
+    /// An SPI transfer failed.
+    Spi(SPI::Error),
+
+    /// A GPIO could not be set.
+    Gpio(GPIO::Error),
 }
 
-pub struct MX25R<SPI>
+pub struct MX25R<SPI, CS>
 where
-    SPI: Write<u8> + Transfer<u8>,
+    SPI: Transfer<u8>,
+    CS: OutputPin,
 {
     spi: SPI,
+    cs: CS,
 }
 
-impl<SPI> MX25R<SPI>
+impl<SPI, CS> MX25R<SPI, CS>
 where
-    SPI: Write<u8> + Transfer<u8>,
+    SPI: Transfer<u8>,
+    CS: OutputPin,
 {
-    pub fn new(spi: SPI) -> Self {
-        Self { spi }
+    pub fn new(spi: SPI, cs: CS) -> Self {
+        Self { spi, cs }
     }
 
-    pub fn read(&mut self, addr: Address, buf: &[u8]) {
-        let addr_val: [u8; 3] = addr.into();
-        let cmd: [u8; 5] = [
+    fn command(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+        self.cs.set_low().map_err(Error::Gpio)?;
+        let spi_result = self.spi.transfer(bytes).map_err(Error::Spi);
+        self.cs.set_high().map_err(Error::Gpio)?;
+        spi_result?;
+        Ok(())
+    }
+
+    pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+        let addr_val: u32 = addr.into();
+
+        self.cs.set_low().map_err(Error::Gpio)?;
+        let mut cmd: [u8; 4] = [
             Command::Read as u8,
-            addr_val[0],
-            addr_val[1],
-            addr_val[2],
-            0,
+            (addr_val >> 16) as u8,
+            (addr_val >> 8) as u8,
+            addr_val as u8,
         ];
-        self.spi.transfer(addr_val);
+        self.spi.transfer(&mut cmd).map_err(Error::Spi);
+        self.spi.transfer(&mut buff).map_err(Error::Spi);
+        self.cs.set_high().map_err(Error::Gpio)?;
+        Ok(())
+    }
+
+    pub fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command(&[Command::WriteEnable as u8])
+    }
+
+    pub fn write_disable(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command(&[Command::Disable as u8])
     }
 }
