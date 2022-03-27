@@ -204,11 +204,24 @@ where
         self.addr_command(addr, Command::BlockErase_32)
     }
 
+    pub fn chip_erase(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command(&[Command::ChipErase])
+    }
+
+    // TODO: pub fn read_sfpd(&mut self) -> Result<(), Error<SPI, CS>> {}
+
     pub fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
         self.command(&[Command::WriteEnable as u8])
     }
 
     pub fn write_disable(&mut self) -> Result<(), Error<SPI, CS>> {
         self.command(&[Command::Disable as u8])
+    }
+
+    pub fn read_status(&mut self) -> Result<[u8; 2], Error<SPI, CS>> {
+        let status: [u8; 2] = [Command::ReadStatus, 0];
+
+        self.command(&mut status)?;
+        return Ok(status);
     }
 }
