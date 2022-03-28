@@ -1,3 +1,4 @@
+use bit::BitIndex;
 use embedded_hal::{
     blocking::spi::{Transfer, Write},
     digital::v2::OutputPin,
@@ -24,6 +25,26 @@ impl Address {
 impl From<Address> for u32 {
     fn from(addr: Address) -> u32 {
         addr.sector as u32 * SECTOR_SIZE + addr.page as u32 * PAGE_SIZE
+    }
+}
+
+pub struct StatusRegister {
+    pub write_protect_disable: bool,
+    pub quad_enable: bool,
+    pub protected_block: u8,
+    pub write_enable_latch: bool,
+    pub wip_bit: bool,
+}
+
+impl From<u8> for StatusRegister {
+    fn from(val: u8) -> StatusRegister {
+        StatusRegister {
+            write_protect_disable: val.bit(7),
+            quad_enable: val.bit(6),
+            protected_block: val.bit_range(2..6),
+            write_enable_latch: val.bit(1),
+            wip_bit: val.bit(0),
+        }
     }
 }
 
@@ -58,7 +79,15 @@ where
         Self { spi, cs }
     }
 
-    fn command(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    fn command_write(&mut self, bytes: &[u8]) -> Result<(), Error<SPI, CS>> {
+        self.cs.set_low().map_err(Error::Gpio)?;
+        let spi_result = self.spi.write(bytes).map_err(Error::Spi);
+        self.cs.set_high().map_err(Error::Gpio)?;
+        spi_result?;
+        Ok(())
+    }
+
+    fn command_transfer(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
         self.cs.set_low().map_err(Error::Gpio)?;
         let spi_result = self.spi.transfer(bytes).map_err(Error::Spi);
         self.cs.set_high().map_err(Error::Gpio)?;
@@ -205,23 +234,23 @@ where
     }
 
     pub fn chip_erase(&mut self) -> Result<(), Error<SPI, CS>> {
-        self.command(&[Command::ChipErase])
+        self.command_write(&[Command::ChipErase])
     }
 
     // TODO: pub fn read_sfpd(&mut self) -> Result<(), Error<SPI, CS>> {}
 
     pub fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
-        self.command(&[Command::WriteEnable as u8])
+        self.command_write(&[Command::WriteEnable as u8])
     }
 
     pub fn write_disable(&mut self) -> Result<(), Error<SPI, CS>> {
-        self.command(&[Command::Disable as u8])
+        self.command_write(&[Command::Disable as u8])
     }
 
-    pub fn read_status(&mut self) -> Result<[u8; 2], Error<SPI, CS>> {
-        let status: [u8; 2] = [Command::ReadStatus, 0];
+    pub fn read_status(&mut self) -> Result<StatusRegister, Error<SPI, CS>> {
+        let status: [u8; 1] = [Command::ReadStatus];
 
-        self.command(&mut status)?;
-        return Ok(status);
+        self.command_transfer(&mut status)?;
+        return Ok(status[0].into());
     }
 }
