@@ -48,6 +48,39 @@ impl From<u8> for StatusRegister {
     }
 }
 
+pub enum ProtectedArea {
+    Top,
+    Bottom,
+}
+impl From<bool> for ProtectedArea {
+    fn from(val: bool) -> Self {
+        if val {
+            ProtectedArea::Bottom
+        } else {
+            ProtectedArea::Top
+        }
+    }
+}
+
+pub enum PowerMode {
+    UltraLowPower,
+    HighPerformance,
+}
+impl From<bool> for PowerMode {
+    fn from(val: bool) -> Self {
+        if val {
+            PowerMode::HighPerformance
+        } else {
+            PowerMode::UltraLowPower
+        }
+    }
+}
+pub struct ConfigurationRegister {
+    pub dummmy_cycle: bool,
+    pub protected_section: ProtectedArea,
+    pub power_mode: PowerMode,
+}
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Error<SPI, GPIO>
 where
@@ -248,9 +281,16 @@ where
     }
 
     pub fn read_status(&mut self) -> Result<StatusRegister, Error<SPI, CS>> {
-        let status: [u8; 1] = [Command::ReadStatus];
+        let status: [u8; 2] = [Command::ReadStatus, 0];
 
         self.command_transfer(&mut status)?;
-        return Ok(status[0].into());
+        return Ok(status[1].into());
+    }
+
+    pub fn read_configuration(&mut self) -> Result<ConfigurationRegister, Error<SPI, CS>> {
+        let status: [u8; 3] = [Command::ReadConfig, 0];
+        Ok(ConfigurationRegister {
+            dummmy_cycle: status[1].bit(6),
+        })
     }
 }
