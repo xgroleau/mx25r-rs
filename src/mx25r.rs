@@ -104,6 +104,15 @@ pub struct MemoryDensity(u8);
 pub struct ElectronicId(u8);
 pub struct DeviceId(u8);
 
+pub struct SecurityRegister {
+    erase_failed: bool,
+    program_failed: bool,
+    erase_suspended: bool,
+    program_suspended: bool,
+    locked_down: bool,
+    secured_otp: bool,
+}
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Error<SPI, GPIO>
 where
@@ -384,9 +393,44 @@ where
         self.command_transfer(&mut command);
         Ok((ManufacturerId(command[5]), DeviceId(command[6])))
     }
-}
 
-// pub struct ManufacturerId(u8);
-// pub struct MemoryType(u8);
-// pub struct MemoryDensity(u8);
-// p ub struct ElectronicId(u8);
+    pub fn enter_secure_opt(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::EnterSecureOTP as u8])
+    }
+
+    pub fn exit_secure_opt(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::ExitScureOTP as u8])
+    }
+
+    pub fn read_security_register(&mut self) -> Result<SecurityRegister, Error<SPI, CS>> {
+        let mut command = [Command::ReadSecurityRegister as u8, 0];
+        self.command_transfer(&mut command);
+        Ok(SecurityRegister {
+            erase_failed: command[1].bit(6),
+            program_failed: command[1].bit(5),
+            erase_suspended: command[1].bit(3),
+            program_suspended: command[1].bit(2),
+            locked_down: command[1].bit(1),
+            secured_otp: command[1].bit(0),
+        })
+    }
+
+    #[deprecated(
+        note = "Warning: This function will lock your security register, make sure you understand the implications"
+    )]
+    pub fn write_security_register(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::WriteSecurityRegister as u8])
+    }
+
+    pub fn nop(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::NOP as u8])
+    }
+
+    pub fn reset_enable(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::ResetEnable as u8])
+    }
+
+    pub fn reset_memory(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::ResetMemory as u8])
+    }
+}
