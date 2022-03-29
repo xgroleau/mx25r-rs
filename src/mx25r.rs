@@ -61,6 +61,14 @@ impl From<bool> for ProtectedArea {
         }
     }
 }
+impl From<ProtectedArea> for bool {
+    fn from(val: ProtectedArea) -> Self {
+        match val {
+            ProtectedArea::Bottom => true,
+            ProtectedArea::Top => false,
+        }
+    }
+}
 
 pub enum PowerMode {
     UltraLowPower,
@@ -75,6 +83,15 @@ impl From<bool> for PowerMode {
         }
     }
 }
+impl From<PowerMode> for bool {
+    fn from(val: PowerMode) -> Self {
+        match val {
+            PowerMode::HighPerformance => true,
+            PowerMode::UltraLowPower => false,
+        }
+    }
+}
+
 pub struct ConfigurationRegister {
     pub dummmy_cycle: bool,
     pub protected_section: ProtectedArea,
@@ -92,6 +109,9 @@ where
 
     /// A GPIO could not be set.
     Gpio(GPIO::Error),
+
+    /// Invalid value
+    Value,
 }
 
 pub struct MX25R<SPI, CS>
@@ -281,16 +301,41 @@ where
     }
 
     pub fn read_status(&mut self) -> Result<StatusRegister, Error<SPI, CS>> {
-        let status: [u8; 2] = [Command::ReadStatus, 0];
+        let command: [u8; 2] = [Command::ReadStatus, 0];
 
-        self.command_transfer(&mut status)?;
-        return Ok(status[1].into());
+        self.command_transfer(&mut command)?;
+        return Ok(command[1].into());
     }
 
     pub fn read_configuration(&mut self) -> Result<ConfigurationRegister, Error<SPI, CS>> {
-        let status: [u8; 3] = [Command::ReadConfig, 0];
+        let command: [u8; 3] = [Command::ReadConfig, 0, 0];
+        self.command_transfer(&mut command)?;
         Ok(ConfigurationRegister {
-            dummmy_cycle: status[1].bit(6),
+            dummmy_cycle: command[1].bit(6),
+            protected_section: command[1].bit(3).into(),
+            power_mode: command[2].bit(1).into(),
         })
+    }
+
+    pub fn write_configuration(
+        &mut self,
+        block_protected: u8,
+        quad_enable: bool,
+        status_write_disable: bool,
+        dummy_cycle: bool,
+        protected_section: ProtectedArea,
+        power_mode: PowerMode,
+    ) -> Result<(), Error<SPI, CS>> {
+        if block_protected > 0x0F {
+            return Err(Error::Value);
+        }
+
+        let mut command: [u8; 4] = [Command::WriteStatus, 0, 0, 0];
+        command[1].set_bit_range(2..6, block_protected);
+        command[1].set_bit(6, status_write_disable);
+        command[2].set_bit(6, dummy_cycle);
+        command[2].set_bit(3, protected_section.into());
+        command[3].set_bit(1, power_mode.into());
+        Ok(())
     }
 }
