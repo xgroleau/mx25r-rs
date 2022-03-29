@@ -1,3 +1,6 @@
+mod command;
+pub mod mx25r;
+
 #[cfg(test)]
 mod tests {
     #[test]
