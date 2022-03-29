@@ -23,7 +23,7 @@ pub enum Command {
     ProgramEraseResume = 0x30,
     DeepPowerDown = 0xB9,
     SetBurstLength = 0xC0,
-    ReadID = 0x9F,
+    ReadIdentification = 0x9F,
     ReadManufacturerId = 0x90,
     ReadElectronicId = 0xAB,
     EnterSecureOTP = 0xB1,

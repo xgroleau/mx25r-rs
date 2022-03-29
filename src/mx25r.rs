@@ -98,6 +98,12 @@ pub struct ConfigurationRegister {
     pub power_mode: PowerMode,
 }
 
+pub struct ManufacturerId(u8);
+pub struct MemoryType(u8);
+pub struct MemoryDensity(u8);
+pub struct ElectronicId(u8);
+pub struct DeviceId(u8);
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Error<SPI, GPIO>
 where
@@ -338,4 +344,49 @@ where
         command[3].set_bit(1, power_mode.into());
         Ok(())
     }
+
+    pub fn suspend_program_erase(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::ProgramEraseSuspend as u8])
+    }
+
+    pub fn resume_program_erase(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::ProgramEraseResume as u8])
+    }
+
+    pub fn deep_power_down(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::DeepPowerDown as u8])
+    }
+
+    pub fn set_burst_length(&mut self, burst_length: u8) -> Result<(), Error<SPI, CS>> {
+        self.command_write(&[Command::SetBurstLength as u8, burst_length])
+    }
+
+    pub fn read_identification(
+        &mut self,
+    ) -> Result<(ManufacturerId, MemoryType, MemoryDensity), Error<SPI, CS>> {
+        let mut command = [Command::ReadIdentification as u8, 0, 0, 0];
+        self.command_transfer(&mut command);
+        Ok((
+            ManufacturerId(command[1]),
+            MemoryType(command[2]),
+            MemoryDensity(command[3]),
+        ))
+    }
+
+    pub fn read_electronic_id(&mut self) -> Result<ElectronicId, Error<SPI, CS>> {
+        let mut command = [Command::ReadElectronicId as u8, DUMMY, DUMMY, DUMMY, 0];
+        self.command_transfer(&mut command);
+        Ok(ElectronicId(command[5]))
+    }
+
+    pub fn read_manufacturer_id(&mut self) -> Result<(ManufacturerId, DeviceId), Error<SPI, CS>> {
+        let mut command = [Command::ReadManufacturerId as u8, DUMMY, DUMMY, 0x00, 0, 0];
+        self.command_transfer(&mut command);
+        Ok((ManufacturerId(command[5]), DeviceId(command[6])))
+    }
 }
+
+// pub struct ManufacturerId(u8);
+// pub struct MemoryType(u8);
+// pub struct MemoryDensity(u8);
+// p ub struct ElectronicId(u8);
