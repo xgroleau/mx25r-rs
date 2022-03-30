@@ -28,6 +28,7 @@ impl From<Address> for u32 {
     }
 }
 
+#[cfg_attr(feature = "defmt-log", derive(defmt::Format))]
 pub struct StatusRegister {
     pub write_protect_disable: bool,
     pub quad_enable: bool,
@@ -113,17 +114,16 @@ pub struct SecurityRegister {
     secured_otp: bool,
 }
 
-pub enum Error<SPI, GPIO>
-where
-    SPI: Transfer<u8> + Write<u8>,
-    GPIO: OutputPin,
-{
+#[derive(Debug, Copy, Clone)]
+pub enum Error {
     /// An SPI transfer failed.
-    Transfer(<SPI as Transfer<u8>>::Error),
-    Write(<SPI as Write<u8>>::Error),
+    Transfer,
+
+    /// An SPI write failed.
+    Write,
 
     /// A GPIO could not be set.
-    Gpio(GPIO::Error),
+    Gpio,
 
     /// Invalid value
     Value,
@@ -147,59 +147,54 @@ where
         Self { spi, cs }
     }
 
-    fn command_write(&mut self, bytes: &[u8]) -> Result<(), Error<SPI, CS>> {
-        self.cs.set_low().map_err(Error::Gpio)?;
-        let spi_result = self.spi.write(bytes).map_err(Error::Write);
-        self.cs.set_high().map_err(Error::Gpio)?;
+    fn command_write(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        self.cs.set_low().map_err(|_| Error::Gpio)?;
+        let spi_result = self.spi.write(bytes).map_err(|_| Error::Write);
+        self.cs.set_high().map_err(|_| Error::Gpio)?;
         spi_result?;
         Ok(())
     }
 
-    fn command_transfer(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
-        self.cs.set_low().map_err(Error::Gpio)?;
-        let spi_result = self.spi.transfer(bytes).map_err(Error::Transfer);
-        self.cs.set_high().map_err(Error::Gpio)?;
+    fn command_transfer(&mut self, bytes: &mut [u8]) -> Result<(), Error> {
+        self.cs.set_low().map_err(|_| Error::Gpio)?;
+        let spi_result = self.spi.transfer(bytes).map_err(|_| Error::Transfer);
+        self.cs.set_high().map_err(|_| Error::Gpio)?;
         spi_result?;
         Ok(())
     }
 
-    fn addr_command(&mut self, addr: Address, cmd: Command) -> Result<(), Error<SPI, CS>> {
+    fn addr_command(&mut self, addr: Address, cmd: Command) -> Result<(), Error> {
         let addr_val: u32 = addr.into();
-        self.cs.set_low().map_err(Error::Gpio)?;
+        self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 4] = [
             cmd as u8,
             (addr_val >> 16) as u8,
             (addr_val >> 8) as u8,
             addr_val as u8,
         ];
-        let res = self.spi.transfer(&mut cmd).map_err(Error::Transfer);
-        self.cs.set_high().map_err(Error::Gpio)?;
+        let res = self.spi.transfer(&mut cmd).map_err(|_| Error::Transfer);
+        self.cs.set_high().map_err(|_| Error::Gpio)?;
 
         res?;
         Ok(())
     }
 
-    fn read_base(
-        &mut self,
-        addr: Address,
-        cmd: Command,
-        buff: &mut [u8],
-    ) -> Result<(), Error<SPI, CS>> {
+    fn read_base(&mut self, addr: Address, cmd: Command, buff: &mut [u8]) -> Result<(), Error> {
         let addr_val: u32 = addr.into();
 
-        self.cs.set_low().map_err(Error::Gpio)?;
+        self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 4] = [
             cmd as u8,
             (addr_val >> 16) as u8,
             (addr_val >> 8) as u8,
             addr_val as u8,
         ];
-        let res1 = self.spi.transfer(&mut cmd).map_err(Error::Transfer);
-        let res2 = self.spi.transfer(buff).map_err(Error::Transfer);
-        self.cs.set_high().map_err(Error::Gpio)?;
+        let cmd_res = self.spi.transfer(&mut cmd).map_err(|_| Error::Transfer);
+        let transfer_res = self.spi.transfer(buff).map_err(|_| Error::Transfer);
+        self.cs.set_high().map_err(|_| Error::Gpio)?;
 
-        res1?;
-        res2?;
+        cmd_res?;
+        transfer_res?;
         Ok(())
     }
 
@@ -208,10 +203,10 @@ where
         addr: Address,
         cmd: Command,
         buff: &mut [u8],
-    ) -> Result<(), Error<SPI, CS>> {
+    ) -> Result<(), Error> {
         let addr_val: u32 = addr.into();
 
-        self.cs.set_low().map_err(Error::Gpio)?;
+        self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 5] = [
             cmd as u8,
             (addr_val >> 16) as u8,
@@ -219,112 +214,107 @@ where
             addr_val as u8,
             DUMMY,
         ];
-        let res1 = self.spi.transfer(&mut cmd).map_err(Error::Transfer);
-        let res2 = self.spi.transfer(buff).map_err(Error::Transfer);
-        self.cs.set_high().map_err(Error::Gpio)?;
+        let cmd_res = self.spi.transfer(&mut cmd).map_err(|_| Error::Transfer);
+        let transfer_res = self.spi.transfer(buff).map_err(|_| Error::Transfer);
+        self.cs.set_high().map_err(|_| Error::Gpio)?;
 
-        res1?;
-        res2?;
+        cmd_res?;
+        transfer_res?;
         Ok(())
     }
 
-    fn write_base(
-        &mut self,
-        addr: Address,
-        cmd: Command,
-        buff: &[u8],
-    ) -> Result<(), Error<SPI, CS>> {
+    fn write_base(&mut self, addr: Address, cmd: Command, buff: &[u8]) -> Result<(), Error> {
         let addr_val: u32 = addr.into();
 
-        self.cs.set_low().map_err(Error::Gpio)?;
+        self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 4] = [
             cmd as u8,
             (addr_val >> 16) as u8,
             (addr_val >> 8) as u8,
             addr_val as u8,
         ];
-        let res1 = self.spi.transfer(&mut cmd).map_err(Error::Transfer);
-        let res2 = self.spi.write(buff).map_err(Error::Write);
-        self.cs.set_high().map_err(Error::Gpio)?;
+        let cmd_res = self.spi.transfer(&mut cmd).map_err(|_| Error::Transfer);
+        let transfer_res = self.spi.write(buff).map_err(|_| Error::Write);
+        self.cs.set_high().map_err(|_| Error::Gpio)?;
 
-        res1?;
-        res2?;
+        cmd_res?;
+        transfer_res?;
         Ok(())
     }
 
-    pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error> {
         self.read_base(addr, Command::Read, buff)
     }
 
-    pub fn read_fast(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read_fast(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error> {
         self.read_base_dummy(addr, Command::ReadF, buff)
     }
 
-    pub fn read_2io(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read_2io(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error> {
         self.read_base_dummy(addr, Command::Read2, buff)
     }
 
-    pub fn read_1i2o(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read_1i2o(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error> {
         self.read_base_dummy(addr, Command::ReadD, buff)
     }
 
-    pub fn read_4io(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read_4io(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error> {
         self.read_base_dummy(addr, Command::Read4, buff)
     }
 
-    pub fn read_1i4o(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read_1i4o(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error> {
         self.read_base_dummy(addr, Command::ReadQ, buff)
     }
 
-    pub fn write_page(&mut self, addr: Address, buff: &[u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn write_page(&mut self, addr: Address, buff: &[u8]) -> Result<(), Error> {
         self.write_base(addr, Command::ProgramPage, buff)
     }
 
-    pub fn write_page_quad(&mut self, addr: Address, buff: &[u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn write_page_quad(&mut self, addr: Address, buff: &[u8]) -> Result<(), Error> {
         self.write_base(addr, Command::ProgramPage4, buff)
     }
 
-    pub fn sector_erase(&mut self, sector: u16) -> Result<(), Error<SPI, CS>> {
+    pub fn sector_erase(&mut self, sector: u16) -> Result<(), Error> {
         let addr = Address::new(sector, 0);
         self.addr_command(addr, Command::SectorErase)
     }
 
-    pub fn block_erase(&mut self, block: u16) -> Result<(), Error<SPI, CS>> {
+    pub fn block_erase(&mut self, block: u16) -> Result<(), Error> {
         let sector = block as u32 * BLOCK_SIZE / SECTOR_SIZE;
         let addr = Address::new(sector as u16, 0);
         self.addr_command(addr, Command::BlockErase)
     }
 
-    pub fn block_erase_32(&mut self, block: u16) -> Result<(), Error<SPI, CS>> {
+    pub fn block_erase_32(&mut self, block: u16) -> Result<(), Error> {
         let sector = block as u32 * BLOCK_SIZE / SECTOR_SIZE / 2;
         let addr = Address::new(sector as u16, 0);
         self.addr_command(addr, Command::BlockErase32)
     }
 
-    pub fn chip_erase(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn chip_erase(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::ChipErase as u8])
     }
 
-    pub fn read_sfpd(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read_sfpd(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error> {
         self.read_base_dummy(addr, Command::ReadSfdp, buff)
     }
 
-    pub fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn write_enable(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::WriteEnable as u8])
     }
 
-    pub fn write_disable(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn write_disable(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::WriteDisable as u8])
     }
 
-    pub fn read_status(&mut self) -> Result<StatusRegister, Error<SPI, CS>> {
+    pub fn read_status(&mut self) -> Result<StatusRegister, Error> {
         let mut command: [u8; 2] = [Command::ReadStatus as u8, 0];
 
         self.command_transfer(&mut command)?;
         return Ok(command[1].into());
     }
 
-    pub fn read_configuration(&mut self) -> Result<ConfigurationRegister, Error<SPI, CS>> {
+    pub fn read_configuration(&mut self) -> Result<ConfigurationRegister, Error> {
         let mut command: [u8; 3] = [Command::ReadConfig as u8, 0, 0];
         self.command_transfer(&mut command)?;
         Ok(ConfigurationRegister {
@@ -342,7 +332,7 @@ where
         dummy_cycle: bool,
         protected_section: ProtectedArea,
         power_mode: PowerMode,
-    ) -> Result<(), Error<SPI, CS>> {
+    ) -> Result<(), Error> {
         if block_protected > 0x0F {
             return Err(Error::Value);
         }
@@ -354,28 +344,29 @@ where
         command[2].set_bit(3, protected_section.into());
         command[2].set_bit(6, dummy_cycle);
         command[3].set_bit(1, power_mode.into());
+        self.command_write(&command)?;
         Ok(())
     }
 
-    pub fn suspend_program_erase(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn suspend_program_erase(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::ProgramEraseSuspend as u8])
     }
 
-    pub fn resume_program_erase(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn resume_program_erase(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::ProgramEraseResume as u8])
     }
 
-    pub fn deep_power_down(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn deep_power_down(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::DeepPowerDown as u8])
     }
 
-    pub fn set_burst_length(&mut self, burst_length: u8) -> Result<(), Error<SPI, CS>> {
+    pub fn set_burst_length(&mut self, burst_length: u8) -> Result<(), Error> {
         self.command_write(&[Command::SetBurstLength as u8, burst_length])
     }
 
     pub fn read_identification(
         &mut self,
-    ) -> Result<(ManufacturerId, MemoryType, MemoryDensity), Error<SPI, CS>> {
+    ) -> Result<(ManufacturerId, MemoryType, MemoryDensity), Error> {
         let mut command = [Command::ReadIdentification as u8, 0, 0, 0];
         self.command_transfer(&mut command)?;
         Ok((
@@ -385,27 +376,27 @@ where
         ))
     }
 
-    pub fn read_electronic_id(&mut self) -> Result<ElectronicId, Error<SPI, CS>> {
+    pub fn read_electronic_id(&mut self) -> Result<ElectronicId, Error> {
         let mut command = [Command::ReadElectronicId as u8, DUMMY, DUMMY, DUMMY, 0];
         self.command_transfer(&mut command)?;
         Ok(ElectronicId(command[4]))
     }
 
-    pub fn read_manufacturer_id(&mut self) -> Result<(ManufacturerId, DeviceId), Error<SPI, CS>> {
+    pub fn read_manufacturer_id(&mut self) -> Result<(ManufacturerId, DeviceId), Error> {
         let mut command = [Command::ReadManufacturerId as u8, DUMMY, DUMMY, 0x00, 0, 0];
         self.command_transfer(&mut command)?;
         Ok((ManufacturerId(command[4]), DeviceId(command[5])))
     }
 
-    pub fn enter_secure_opt(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn enter_secure_opt(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::EnterSecureOTP as u8])
     }
 
-    pub fn exit_secure_opt(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn exit_secure_opt(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::ExitSecureOTP as u8])
     }
 
-    pub fn read_security_register(&mut self) -> Result<SecurityRegister, Error<SPI, CS>> {
+    pub fn read_security_register(&mut self) -> Result<SecurityRegister, Error> {
         let mut command = [Command::ReadSecurityRegister as u8, 0];
         self.command_transfer(&mut command)?;
         Ok(SecurityRegister {
@@ -422,19 +413,19 @@ where
     #[deprecated(
         note = "Warning: This function will lock your security register, make sure you understand the implications"
     )]
-    pub fn write_security_register(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn write_security_register(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::WriteSecurityRegister as u8])
     }
 
-    pub fn nop(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn nop(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::NOP as u8])
     }
 
-    pub fn reset_enable(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn reset_enable(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::ResetEnable as u8])
     }
 
-    pub fn reset(&mut self) -> Result<(), Error<SPI, CS>> {
+    pub fn reset(&mut self) -> Result<(), Error> {
         self.command_write(&[Command::ResetMemory as u8])
     }
 }

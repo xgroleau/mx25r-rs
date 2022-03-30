@@ -1,3 +1,5 @@
+#![no_std]
+
 mod command;
 pub mod mx25r;
 
