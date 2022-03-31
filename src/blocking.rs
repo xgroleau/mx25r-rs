@@ -1,34 +1,16 @@
+use crate::{address::Address, command::Command, register::*};
 use bit::BitIndex;
 use embedded_hal::{
     blocking::spi::{Transfer, Write},
     digital::v2::OutputPin,
 };
 
-use crate::{command::Command, register::*};
-
+// TODO: Remove duplication with const generic
 const SECTOR_SIZE: u32 = 0x1000;
 const PAGE_SIZE: u32 = 0x100;
+
 const BLOCK_SIZE: u32 = 0x010000;
 const DUMMY: u8 = 0xFF;
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Clone, Copy)]
-pub struct Address {
-    pub sector: u16,
-    pub page: u8,
-}
-
-impl Address {
-    pub fn new(sector: u16, page: u8) -> Self {
-        Self { sector, page }
-    }
-}
-
-impl From<Address> for u32 {
-    fn from(addr: Address) -> u32 {
-        addr.sector as u32 * SECTOR_SIZE + addr.page as u32 * PAGE_SIZE
-    }
-}
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Clone, Copy)]

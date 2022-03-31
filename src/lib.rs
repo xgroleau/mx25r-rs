@@ -1,7 +1,8 @@
 #![no_std]
 
+pub mod address;
+pub mod blocking;
 mod command;
-pub mod mx25r;
 pub mod register;
 
 #[cfg(test)]

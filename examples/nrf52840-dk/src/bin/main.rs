@@ -9,16 +9,12 @@ use embassy::{
     time::{Duration, Timer},
 };
 use embassy_nrf::{
-    config,
     gpio::{Level, Output, OutputDrive},
     interrupt,
     spim::{self, Spim},
     Peripherals,
 };
-use mx25r::{
-    self,
-    mx25r::{Address, MX25R},
-};
+use mx25r::{address::Address, blocking::MX25R};
 use panic_probe as _;
 
 #[embassy::main]
