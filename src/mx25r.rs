@@ -4,7 +4,7 @@ use embedded_hal::{
     digital::v2::OutputPin,
 };
 
-use crate::command::Command;
+use crate::{command::Command, register::*};
 
 const SECTOR_SIZE: u32 = 0x1000;
 const PAGE_SIZE: u32 = 0x100;
@@ -28,101 +28,6 @@ impl From<Address> for u32 {
     fn from(addr: Address) -> u32 {
         addr.sector as u32 * SECTOR_SIZE + addr.page as u32 * PAGE_SIZE
     }
-}
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Clone, Copy)]
-pub struct StatusRegister {
-    pub write_protect_disable: bool,
-    pub quad_enable: bool,
-    pub protected_block: u8,
-    pub write_enable_latch: bool,
-    pub wip_bit: bool,
-}
-
-impl From<u8> for StatusRegister {
-    fn from(val: u8) -> StatusRegister {
-        StatusRegister {
-            write_protect_disable: val.bit(7),
-            quad_enable: val.bit(6),
-            protected_block: val.bit_range(2..6),
-            write_enable_latch: val.bit(1),
-            wip_bit: val.bit(0),
-        }
-    }
-}
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Clone, Copy)]
-pub enum ProtectedArea {
-    Top,
-    Bottom,
-}
-impl From<bool> for ProtectedArea {
-    fn from(val: bool) -> Self {
-        if val {
-            ProtectedArea::Bottom
-        } else {
-            ProtectedArea::Top
-        }
-    }
-}
-impl From<ProtectedArea> for bool {
-    fn from(val: ProtectedArea) -> Self {
-        match val {
-            ProtectedArea::Bottom => true,
-            ProtectedArea::Top => false,
-        }
-    }
-}
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Clone, Copy)]
-pub enum PowerMode {
-    UltraLowPower,
-    HighPerformance,
-}
-impl From<bool> for PowerMode {
-    fn from(val: bool) -> Self {
-        if val {
-            PowerMode::HighPerformance
-        } else {
-            PowerMode::UltraLowPower
-        }
-    }
-}
-impl From<PowerMode> for bool {
-    fn from(val: PowerMode) -> Self {
-        match val {
-            PowerMode::HighPerformance => true,
-            PowerMode::UltraLowPower => false,
-        }
-    }
-}
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Clone, Copy)]
-pub struct ConfigurationRegister {
-    pub dummmy_cycle: bool,
-    pub protected_section: ProtectedArea,
-    pub power_mode: PowerMode,
-}
-
-pub struct ManufacturerId(u8);
-pub struct MemoryType(u8);
-pub struct MemoryDensity(u8);
-pub struct ElectronicId(u8);
-pub struct DeviceId(u8);
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Debug, Clone, Copy)]
-pub struct SecurityRegister {
-    erase_failed: bool,
-    program_failed: bool,
-    erase_suspended: bool,
-    program_suspended: bool,
-    locked_down: bool,
-    secured_otp: bool,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

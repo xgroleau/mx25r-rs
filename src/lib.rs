@@ -2,6 +2,7 @@
 
 mod command;
 pub mod mx25r;
+pub mod register;
 
 #[cfg(test)]
 mod tests {
