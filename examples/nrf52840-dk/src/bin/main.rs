@@ -30,15 +30,15 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let spi = Spim::new(p.TWISPI0, irq, p.P0_19, p.P0_21, p.P0_20, spi_config);
     let cs = Output::new(p.P0_17, Level::High, OutputDrive::Standard);
     let mut memory = MX25R::new(spi, cs);
-    memory.chip_erase().unwrap();
     let mut buff = [0];
 
+    memory.write_enable().unwrap();
+    // memory.chip_erase().unwrap();
     info!("Status {}", memory.read_status().unwrap());
 
-    memory.write_enable().unwrap();
     info!("Writing 42");
     memory
-        .write_page(Address { sector: 0, page: 0 }, &[42])
+        .write_page(Address { sector: 0, page: 0 }, &[43])
         .unwrap();
 
     info!("Status {}", memory.read_status().unwrap());
@@ -50,6 +50,6 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     loop {
         info!("Status {}", memory.read_status().unwrap());
-        Timer::after(Duration::from_millis(1000)).await;
+        Timer::after(Duration::from_millis(5000)).await;
     }
 }
