@@ -27,6 +27,8 @@ async fn main(spawner: Spawner, p: Peripherals) {
     spi_config.frequency = spim::Frequency::M16;
 
     let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
+
+    // See https://infocenter.nordicsemi.com/index.jsp?topic=%2Fug_nrf52840_dk%2FUG%2Fdk%2Fhw_external_memory.html
     let spi = Spim::new(p.TWISPI0, irq, p.P0_19, p.P0_21, p.P0_20, spi_config);
     let cs = Output::new(p.P0_17, Level::High, OutputDrive::Standard);
     let mut memory = MX25R::new(spi, cs);

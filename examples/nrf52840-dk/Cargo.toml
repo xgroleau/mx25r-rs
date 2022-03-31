@@ -24,7 +24,7 @@ cortex-m = "0.7.3"
 cortex-m-rt = "0.7.0"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 
-mx25r = { version = "0.1.0", path = "../.." , features = ["defmt-log"] }
+mx25r = { version = "0.1.0", path = "../.." , features = ["defmt"] }
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }

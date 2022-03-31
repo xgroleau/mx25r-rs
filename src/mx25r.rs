@@ -11,6 +11,8 @@ const PAGE_SIZE: u32 = 0x100;
 const BLOCK_SIZE: u32 = 0x010000;
 const DUMMY: u8 = 0xFF;
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Clone, Copy)]
 pub struct Address {
     pub sector: u16,
     pub page: u8,
@@ -28,7 +30,8 @@ impl From<Address> for u32 {
     }
 }
 
-#[cfg_attr(feature = "defmt-log", derive(defmt::Format))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Clone, Copy)]
 pub struct StatusRegister {
     pub write_protect_disable: bool,
     pub quad_enable: bool,
@@ -49,6 +52,8 @@ impl From<u8> for StatusRegister {
     }
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Clone, Copy)]
 pub enum ProtectedArea {
     Top,
     Bottom,
@@ -71,6 +76,8 @@ impl From<ProtectedArea> for bool {
     }
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Clone, Copy)]
 pub enum PowerMode {
     UltraLowPower,
     HighPerformance,
@@ -93,6 +100,8 @@ impl From<PowerMode> for bool {
     }
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Clone, Copy)]
 pub struct ConfigurationRegister {
     pub dummmy_cycle: bool,
     pub protected_section: ProtectedArea,
@@ -105,6 +114,8 @@ pub struct MemoryDensity(u8);
 pub struct ElectronicId(u8);
 pub struct DeviceId(u8);
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Clone, Copy)]
 pub struct SecurityRegister {
     erase_failed: bool,
     program_failed: bool,
@@ -114,7 +125,8 @@ pub struct SecurityRegister {
     secured_otp: bool,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug, Clone, Copy)]
 pub enum Error {
     /// An SPI transfer failed.
     Transfer,
