@@ -17,6 +17,16 @@ use embassy_nrf::{
 use mx25r::{address::Address, blocking::MX25R};
 use panic_probe as _;
 
+async fn wait_wip<SPI, CS>(mx25r: &mut MX25R<SPI, CS>)
+where
+    SPI: embedded_hal::blocking::spi::Transfer<u8> + embedded_hal::blocking::spi::Write<u8>,
+    CS: embedded_hal::digital::v2::OutputPin,
+{
+    while mx25r.read_status().unwrap().wip_bit {
+        Timer::after(Duration::from_millis(100)).await;
+    }
+}
+
 #[embassy::main]
 async fn main(spawner: Spawner, p: Peripherals) {
     let mut spi_config = spim::Config::default();
@@ -31,7 +41,8 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let mut buff = [0];
 
     memory.write_enable().unwrap();
-    // memory.chip_erase().unwrap();
+    memory.chip_erase().unwrap();
+    wait_wip(&mut memory).await;
     info!("Status {}", memory.read_status().unwrap());
 
     info!("Writing 42");
