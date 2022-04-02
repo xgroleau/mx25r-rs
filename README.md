@@ -1,5 +1,5 @@
 # mx25r-rs
-Driver for the MX25R chip using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**. It only suports the MX25R6435F for now.
+Driver for the MX25R chip using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**.
 
 ## TODO
 * Complete sync low level driver
