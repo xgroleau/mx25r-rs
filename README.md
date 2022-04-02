@@ -3,8 +3,11 @@ Driver for the MX25R chip using the [embedded-hal](https://github.com/rust-embed
 
 ## TODO
 * Complete sync low level driver
+* Complete example to test most features
 * Add support all mx25r family
-* Add wrapper over driver
+  * Other macronix chips? (L, S, U)
+* Add typestate programming
+* Use embedded hal 1.0 alpha instead of 0.2.x
 * Add async suport
 
 ## License

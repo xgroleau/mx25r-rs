@@ -9,6 +9,3 @@ edition = "2021"
 embedded-hal = "0.2.7"
 bit = "0.1.1"
 defmt = { version = "0.3", optional = true }
-
-[features]
-defmt-log = [ "defmt" ]
