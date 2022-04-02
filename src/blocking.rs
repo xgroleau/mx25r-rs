@@ -1,15 +1,23 @@
-use crate::{address::Address, command::Command, register::*};
+use crate::{
+    address::{Address, Block32, Block64, Sector},
+    command::Command,
+    register::*,
+};
 use bit::BitIndex;
 use embedded_hal::{
     blocking::spi::{Transfer, Write},
     digital::v2::OutputPin,
 };
 
-// TODO: Remove duplication with const generic
-const SECTOR_SIZE: u32 = 0x1000;
-const PAGE_SIZE: u32 = 0x100;
+pub type MX25R512F<SPI, CS> = MX25R<0x00FFFF, SPI, CS>;
+pub type MX25R1035F<SPI, CS> = MX25R<0x01FFFF, SPI, CS>;
+pub type MX25R2035F<SPI, CS> = MX25R<0x03FFFF, SPI, CS>;
+pub type MX25R4035F<SPI, CS> = MX25R<0x07FFFF, SPI, CS>;
+pub type MX25R8035F<SPI, CS> = MX25R<0x0FFFFF, SPI, CS>;
+pub type MX25R1635F<SPI, CS> = MX25R<0x1FFFFF, SPI, CS>;
+pub type MX25R3235F<SPI, CS> = MX25R<0x3FFFFF, SPI, CS>;
+pub type MX25R6435F<SPI, CS> = MX25R<0x7FFFFF, SPI, CS>;
 
-const BLOCK_SIZE: u32 = 0x010000;
 const DUMMY: u8 = 0xFF;
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -26,9 +34,12 @@ pub enum Error {
 
     /// Invalid value
     Value,
+
+    /// Invalid address
+    Address,
 }
 
-pub struct MX25R<SPI, CS>
+pub struct MX25R<const SIZE: u32, SPI, CS>
 where
     SPI: Transfer<u8> + Write<u8>,
     CS: OutputPin,
@@ -37,13 +48,21 @@ where
     cs: CS,
 }
 
-impl<SPI, CS> MX25R<SPI, CS>
+impl<const SIZE: u32, SPI, CS> MX25R<SIZE, SPI, CS>
 where
     SPI: Transfer<u8> + Write<u8>,
     CS: OutputPin,
 {
     pub fn new(spi: SPI, cs: CS) -> Self {
         Self { spi, cs }
+    }
+
+    fn verify_addr(addr: Address) -> Result<u32, Error> {
+        let val: u32 = addr.into();
+        if val > SIZE {
+            return Err(Error::Address);
+        }
+        Ok(val)
     }
 
     fn command_write(&mut self, bytes: &[u8]) -> Result<(), Error> {
@@ -63,7 +82,7 @@ where
     }
 
     fn addr_command(&mut self, addr: Address, cmd: Command) -> Result<(), Error> {
-        let addr_val: u32 = addr.into();
+        let addr_val: u32 = Self::verify_addr(addr)?;
         self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 4] = [
             cmd as u8,
@@ -79,7 +98,7 @@ where
     }
 
     fn read_base(&mut self, addr: Address, cmd: Command, buff: &mut [u8]) -> Result<(), Error> {
-        let addr_val: u32 = addr.into();
+        let addr_val: u32 = Self::verify_addr(addr)?;
 
         self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 4] = [
@@ -103,7 +122,7 @@ where
         cmd: Command,
         buff: &mut [u8],
     ) -> Result<(), Error> {
-        let addr_val: u32 = addr.into();
+        let addr_val: u32 = Self::verify_addr(addr)?;
 
         self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 5] = [
@@ -123,7 +142,7 @@ where
     }
 
     fn write_base(&mut self, addr: Address, cmd: Command, buff: &[u8]) -> Result<(), Error> {
-        let addr_val: u32 = addr.into();
+        let addr_val: u32 = Self::verify_addr(addr)?;
 
         self.cs.set_low().map_err(|_| Error::Gpio)?;
         let mut cmd: [u8; 4] = [
@@ -173,20 +192,18 @@ where
         self.write_base(addr, Command::ProgramPage4, buff)
     }
 
-    pub fn sector_erase(&mut self, sector: u16) -> Result<(), Error> {
-        let addr = Address::new(sector, 0);
+    pub fn sector_erase(&mut self, sector: Sector) -> Result<(), Error> {
+        let addr = Address::from_sector(sector);
         self.addr_command(addr, Command::SectorErase)
     }
 
-    pub fn block_erase(&mut self, block: u16) -> Result<(), Error> {
-        let sector = block as u32 * BLOCK_SIZE / SECTOR_SIZE;
-        let addr = Address::new(sector as u16, 0);
+    pub fn block_erase(&mut self, block: Block64) -> Result<(), Error> {
+        let addr = Address::from_block64(block);
         self.addr_command(addr, Command::BlockErase)
     }
 
-    pub fn block_erase_32(&mut self, block: u16) -> Result<(), Error> {
-        let sector = block as u32 * BLOCK_SIZE / SECTOR_SIZE / 2;
-        let addr = Address::new(sector as u16, 0);
+    pub fn block_erase_32(&mut self, block: Block32) -> Result<(), Error> {
+        let addr = Address::from_block32(block);
         self.addr_command(addr, Command::BlockErase32)
     }
 
@@ -210,7 +227,7 @@ where
         let mut command: [u8; 2] = [Command::ReadStatus as u8, 0];
 
         self.command_transfer(&mut command)?;
-        return Ok(command[1].into());
+        Ok(command[1].into())
     }
 
     pub fn read_configuration(&mut self) -> Result<ConfigurationRegister, Error> {
@@ -317,7 +334,7 @@ where
     }
 
     pub fn nop(&mut self) -> Result<(), Error> {
-        self.command_write(&[Command::NOP as u8])
+        self.command_write(&[Command::Nop as u8])
     }
 
     pub fn reset_enable(&mut self) -> Result<(), Error> {

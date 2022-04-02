@@ -30,8 +30,7 @@ pub enum Command {
     ExitSecureOTP = 0xC1,
     ReadSecurityRegister = 0x2B,
     WriteSecurityRegister = 0x2F,
-    NOP = 0x00,
+    Nop = 0x00,
     ResetEnable = 0x66,
     ResetMemory = 0x99,
-    ReleaseReadEnhanceMode = 0xFF,
 }
