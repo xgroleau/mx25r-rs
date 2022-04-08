@@ -2,6 +2,8 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+use core::fmt::Debug;
+
 use defmt::info;
 use defmt_rtt as _;
 use embassy::{
@@ -11,19 +13,23 @@ use embassy::{
 use embassy_nrf::{
     gpio::{Level, Output, OutputDrive},
     interrupt,
+    peripherals::{P0_17, TWISPI0},
     spim::{self, Spim},
     Peripherals,
 };
+use embedded_hal::spi::blocking::{ExclusiveDevice, SpiDevice};
+use mx25r::blocking::Error;
 use mx25r::{
     address::{Address, Page, Sector},
     blocking::MX25R6435F,
 };
 use panic_probe as _;
 
-async fn wait_wip<SPI, CS>(mx25r: &mut MX25R6435F<SPI, CS>)
+type DkMX25R<'a> = MX25R6435F<ExclusiveDevice<Spim<'a, TWISPI0>, Output<'a, P0_17>>>;
+
+async fn wait_wip<SPI>(mx25r: &mut DkMX25R<'_>)
 where
-    SPI: embedded_hal::blocking::spi::Transfer<u8> + embedded_hal::blocking::spi::Write<u8>,
-    CS: embedded_hal::digital::v2::OutputPin,
+    SPI: SpiDevice,
 {
     while mx25r.read_status().unwrap().wip_bit {
         Timer::after(Duration::from_millis(100)).await;
@@ -40,7 +46,9 @@ async fn main(spawner: Spawner, p: Peripherals) {
     // See https://infocenter.nordicsemi.com/index.jsp?topic=%2Fug_nrf52840_dk%2FUG%2Fdk%2Fhw_external_memory.html
     let spi = Spim::new(p.TWISPI0, irq, p.P0_19, p.P0_21, p.P0_20, spi_config);
     let cs = Output::new(p.P0_17, Level::High, OutputDrive::Standard);
-    let mut memory = MX25R6435F::new(spi, cs);
+    let spi_dev = ExclusiveDevice::new(spi, cs);
+
+    let mut memory = MX25R6435F::new(spi_dev);
     let mut buff = [0];
 
     memory.write_enable().unwrap();

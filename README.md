@@ -2,7 +2,6 @@
 Driver for the MX25R chip using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**.
 
 ## TODO
-* Complete sync low level driver
 * Complete example to test most features
 * Add support all mx25r family
   * Other macronix chips? (L, S, U)
