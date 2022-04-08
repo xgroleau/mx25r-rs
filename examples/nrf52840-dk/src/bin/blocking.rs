@@ -2,8 +2,6 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-use core::fmt::Debug;
-
 use defmt::info;
 use defmt_rtt as _;
 use embassy::{
@@ -17,8 +15,7 @@ use embassy_nrf::{
     spim::{self, Spim},
     Peripherals,
 };
-use embedded_hal::spi::blocking::{ExclusiveDevice, SpiDevice};
-use mx25r::blocking::Error;
+use embedded_hal::spi::blocking::ExclusiveDevice;
 use mx25r::{
     address::{Address, Page, Sector},
     blocking::MX25R6435F,
@@ -27,10 +24,7 @@ use panic_probe as _;
 
 type DkMX25R<'a> = MX25R6435F<ExclusiveDevice<Spim<'a, TWISPI0>, Output<'a, P0_17>>>;
 
-async fn wait_wip<SPI>(mx25r: &mut DkMX25R<'_>)
-where
-    SPI: SpiDevice,
-{
+async fn wait_wip(mx25r: &mut DkMX25R<'_>) {
     while mx25r.read_status().unwrap().wip_bit {
         Timer::after(Duration::from_millis(100)).await;
     }
