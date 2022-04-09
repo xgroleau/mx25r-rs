@@ -1,5 +1,5 @@
 use crate::{
-    address::{Address, Block32, Block64, Sector},
+    address::{self, Address, Block32, Block64, Page, Sector},
     command::Command,
     register::*,
 };
@@ -35,14 +35,17 @@ pub type MX25R6435F<SPI> = MX25R<0x7FFFFF, SPI>;
 /// All possible errors emitted by the driver
 #[derive(Debug, Clone, Copy)]
 pub enum Error<SpiError> {
-    /// SPI error
+    /// Internal Spi error
     Spi(SpiError),
 
-    /// Invalid value
+    /// Invalid value passed
     Value,
 
-    /// Invalid address
-    Address,
+    /// Address out of bound
+    OutOfBound,
+
+    /// Address not aligned
+    NotAligned,
 }
 
 /// The generic MX25R driver
@@ -63,10 +66,10 @@ where
         Self { spi }
     }
 
-    fn verify_addr(addr: Address) -> Result<u32, Error<E>> {
+    pub fn verify_addr(addr: Address) -> Result<u32, Error<E>> {
         let val: u32 = addr.into();
         if val > SIZE {
-            return Err(Error::Address);
+            return Err(Error::OutOfBound);
         }
         Ok(val)
     }
@@ -178,11 +181,18 @@ where
         self.read_base_dummy(addr, Command::ReadQ, buff)
     }
 
-    pub fn write_page(&mut self, addr: Address, buff: &[u8]) -> Result<(), Error<E>> {
+    pub fn write_page(&mut self, sector: Sector, page: Page, buff: &[u8]) -> Result<(), Error<E>> {
+        let addr = Address::from_page(sector, page);
         self.write_base(addr, Command::ProgramPage, buff)
     }
 
-    pub fn write_page_quad(&mut self, addr: Address, buff: &[u8]) -> Result<(), Error<E>> {
+    pub fn write_page_quad(
+        &mut self,
+        sector: Sector,
+        page: Page,
+        buff: &[u8],
+    ) -> Result<(), Error<E>> {
+        let addr = Address::from_page(sector, page);
         self.write_base(addr, Command::ProgramPage4, buff)
     }
 
@@ -337,5 +347,84 @@ where
 
     pub fn reset(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ResetMemory as u8])
+    }
+}
+
+mod es {
+    use crate::address::{PAGE_SIZE, SECTOR_SIZE};
+
+    use super::*;
+    use core::fmt::Debug;
+    use embedded_storage::nor_flash::{
+        ErrorType, NorFlash, NorFlashError, NorFlashErrorKind, ReadNorFlash,
+    };
+
+    impl<SpiError> NorFlashError for Error<SpiError>
+    where
+        SpiError: Debug,
+    {
+        fn kind(&self) -> NorFlashErrorKind {
+            match self {
+                Error::OutOfBound => NorFlashErrorKind::OutOfBounds,
+                Error::NotAligned => NorFlashErrorKind::NotAligned,
+                Error::Value => NorFlashErrorKind::Other,
+                Error::Spi(_) => NorFlashErrorKind::Other,
+            }
+        }
+    }
+
+    impl<const SIZE: u32, SPI, E> ErrorType for MX25R<SIZE, SPI>
+    where
+        SPI: SpiDevice<Error = E>,
+        SPI::Bus: SpiBus,
+        E: Debug,
+    {
+        type Error = Error<E>;
+    }
+
+    impl<const SIZE: u32, SPI, E> ReadNorFlash for MX25R<SIZE, SPI>
+    where
+        SPI: SpiDevice<Error = E>,
+        SPI::Bus: SpiBus,
+        E: Debug,
+    {
+        const READ_SIZE: usize = 1;
+
+        fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+            if offset > SIZE {
+                return Err(Error::OutOfBound);
+            }
+            self.read(Address(offset), bytes)
+        }
+
+        fn capacity(&self) -> usize {
+            SIZE as usize
+        }
+    }
+
+    impl<const SIZE: u32, SPI, E> NorFlash for MX25R<SIZE, SPI>
+    where
+        SPI: SpiDevice<Error = E>,
+        SPI::Bus: SpiBus,
+        E: Debug,
+    {
+        const WRITE_SIZE: usize = address::PAGE_SIZE as usize;
+        const ERASE_SIZE: usize = address::SECTOR_SIZE as usize;
+
+        fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+            todo!()
+        }
+        
+        fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+            if offset > SIZE {
+                return Err(Error::OutOfBound);
+            }
+            else if offset % SECTOR_SIZE % PAGE_SIZE != 0 {
+                return Err(Error::NotAligned);
+            }
+            let sector_id = (offset / SECTOR_SIZE) as u16;
+            let page_id = (offset / PAGE_SIZE) as u8;
+            self.write_page(sector_id.into(), page_id.into(), bytes)
+        }
     }
 }

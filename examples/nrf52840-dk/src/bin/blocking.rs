@@ -50,9 +50,11 @@ async fn main(spawner: Spawner, p: Peripherals) {
     wait_wip(&mut memory).await;
     info!("Status {}", memory.read_status().unwrap());
 
-    let addr = Address::from_page(Sector(0), Page(0));
+    let page = Page(0);
+    let sector = Sector(0);
+    let addr = Address::from_page(sector, page);
     info!("Writing 42");
-    memory.write_page(addr, &[42]).unwrap();
+    memory.write_page(sector, page, &[42]).unwrap();
 
     info!("Status {}", memory.read_status().unwrap());
     info!("Value before {}", buff);
