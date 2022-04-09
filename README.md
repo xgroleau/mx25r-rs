@@ -3,11 +3,12 @@ Driver for the MX25R chip using the [embedded-hal](https://github.com/rust-embed
 
 ## TODO
 * Complete example to test most features
-* Add support all mx25r family
-  * Other macronix chips? (L, S, U)
-* Add typestate programming
-* Use embedded hal 1.0 alpha instead of 0.2.x
+* Use the embedded-hal crate instead of the embassy fork.
 * Add async suport
+* Implement [embedded_storage nor_flash trait](https://docs.rs/embedded-storage/latest/embedded_storage/nor_flash/index.html)
+
+## Usage
+You can see an example of the usage for the `nRF52840-DK` in the [examples directory](./examples/nrf52840-dk). For now only a blocking API is available.
 
 ## License
 

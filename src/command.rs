@@ -1,3 +1,4 @@
+/// Possible commands to send to the MX25R
 #[repr(u8)]
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Command {

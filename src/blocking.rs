@@ -6,20 +6,35 @@ use crate::{
 use bit::BitIndex;
 use embedded_hal::spi::blocking::{SpiBus, SpiBusRead, SpiBusWrite, SpiDevice};
 
-pub type MX25R512F<SPI> = MX25R<0x00FFFF, SPI>;
-pub type MX25R1035F<SPI> = MX25R<0x01FFFF, SPI>;
-pub type MX25R2035F<SPI> = MX25R<0x03FFFF, SPI>;
-pub type MX25R4035F<SPI> = MX25R<0x07FFFF, SPI>;
-pub type MX25R8035F<SPI> = MX25R<0x0FFFFF, SPI>;
-pub type MX25R1635F<SPI> = MX25R<0x1FFFFF, SPI>;
-pub type MX25R3235F<SPI> = MX25R<0x3FFFFF, SPI>;
-pub type MX25R6435F<SPI> = MX25R<0x7FFFFF, SPI>;
-
 const DUMMY: u8 = 0xFF;
 
+/// Type alias for the MX25R512F
+pub type MX25R512F<SPI> = MX25R<0x00FFFF, SPI>;
+
+/// Type alias for the MX25R1035F
+pub type MX25R1035F<SPI> = MX25R<0x01FFFF, SPI>;
+
+/// Type alias for the MX25R2035F
+pub type MX25R2035F<SPI> = MX25R<0x03FFFF, SPI>;
+
+/// Type alias for the MX25R4035F
+pub type MX25R4035F<SPI> = MX25R<0x07FFFF, SPI>;
+
+/// Type alias for the MX25R8035F
+pub type MX25R8035F<SPI> = MX25R<0x0FFFFF, SPI>;
+
+/// Type alias for the MX25R1635F
+pub type MX25R1635F<SPI> = MX25R<0x1FFFFF, SPI>;
+
+/// Type alias for the MX25R3235F
+pub type MX25R3235F<SPI> = MX25R<0x3FFFFF, SPI>;
+
+/// Type alias for the MX25R6435F
+pub type MX25R6435F<SPI> = MX25R<0x7FFFFF, SPI>;
+
+/// All possible errors emitted by the driver
 #[derive(Debug, Clone, Copy)]
-pub enum Error<SpiError> 
-{
+pub enum Error<SpiError> {
     /// SPI error
     Spi(SpiError),
 
@@ -30,6 +45,7 @@ pub enum Error<SpiError>
     Address,
 }
 
+/// The generic MX25R driver
 pub struct MX25R<const SIZE: u32, SPI>
 where
     SPI: SpiDevice,
