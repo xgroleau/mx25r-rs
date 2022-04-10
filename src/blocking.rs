@@ -42,7 +42,7 @@ pub enum Error<SpiError> {
     Value,
 
     /// Address out of bound
-    OutOfBound,
+    OutOfBounds,
 
     /// Address not aligned
     NotAligned,
@@ -69,7 +69,7 @@ where
     pub fn verify_addr(addr: Address) -> Result<u32, Error<E>> {
         let val: u32 = addr.into();
         if val > SIZE {
-            return Err(Error::OutOfBound);
+            return Err(Error::OutOfBounds);
         }
         Ok(val)
     }
@@ -201,12 +201,12 @@ where
         self.addr_command(addr, Command::SectorErase)
     }
 
-    pub fn block_erase(&mut self, block: Block64) -> Result<(), Error<E>> {
+    pub fn block64_erase(&mut self, block: Block64) -> Result<(), Error<E>> {
         let addr = Address::from_block64(block);
         self.addr_command(addr, Command::BlockErase)
     }
 
-    pub fn block_erase_32(&mut self, block: Block32) -> Result<(), Error<E>> {
+    pub fn block32_erase(&mut self, block: Block32) -> Result<(), Error<E>> {
         let addr = Address::from_block32(block);
         self.addr_command(addr, Command::BlockErase32)
     }
@@ -215,7 +215,7 @@ where
         self.command_write(&[Command::ChipErase as u8])
     }
 
-    pub fn read_sfpd(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
+    pub fn read_sfdp(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
         self.read_base_dummy(addr, Command::ReadSfdp, buff)
     }
 
@@ -351,13 +351,24 @@ where
 }
 
 mod es {
-    use crate::address::{PAGE_SIZE, SECTOR_SIZE};
+    use crate::address::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
 
     use super::*;
     use core::fmt::Debug;
     use embedded_storage::nor_flash::{
-        ErrorType, NorFlash, NorFlashError, NorFlashErrorKind, ReadNorFlash,
+        check_erase, check_read, check_write, ErrorType, MultiwriteNorFlash, NorFlash,
+        NorFlashError, NorFlashErrorKind, ReadNorFlash,
     };
+
+    impl<E> From<NorFlashErrorKind> for Error<E> {
+        fn from(e: NorFlashErrorKind) -> Self {
+            match e {
+                NorFlashErrorKind::NotAligned => Error::NotAligned,
+                NorFlashErrorKind::OutOfBounds => Error::OutOfBounds,
+                _ => Error::Value,
+            }
+        }
+    }
 
     impl<SpiError> NorFlashError for Error<SpiError>
     where
@@ -365,7 +376,7 @@ mod es {
     {
         fn kind(&self) -> NorFlashErrorKind {
             match self {
-                Error::OutOfBound => NorFlashErrorKind::OutOfBounds,
+                Error::OutOfBounds => NorFlashErrorKind::OutOfBounds,
                 Error::NotAligned => NorFlashErrorKind::NotAligned,
                 Error::Value => NorFlashErrorKind::Other,
                 Error::Spi(_) => NorFlashErrorKind::Other,
@@ -391,8 +402,9 @@ mod es {
         const READ_SIZE: usize = 1;
 
         fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+            check_read(self, offset, bytes.len())?;
             if offset > SIZE {
-                return Err(Error::OutOfBound);
+                return Err(Error::OutOfBounds);
             }
             self.read(Address(offset), bytes)
         }
@@ -412,19 +424,38 @@ mod es {
         const ERASE_SIZE: usize = address::SECTOR_SIZE as usize;
 
         fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
-            todo!()
+            check_erase(self, from, to)?;
+            let addr_diff = from - to;
+            match addr_diff {
+                SECTOR_SIZE => {
+                    let sector = Sector((from / SECTOR_SIZE) as u16);
+                    self.sector_erase(sector)
+                }
+                BLOCK32_SIZE => {
+                    let block = Block32((from / BLOCK32_SIZE) as u16);
+                    self.block32_erase(block)
+                }
+                BLOCK64_SIZE => {
+                    let block = Block64((from / BLOCK64_SIZE) as u16);
+                    self.block64_erase(block)
+                }
+                _ => Err(Error::NotAligned),
+            }
         }
-        
+
         fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
-            if offset > SIZE {
-                return Err(Error::OutOfBound);
-            }
-            else if offset % SECTOR_SIZE % PAGE_SIZE != 0 {
-                return Err(Error::NotAligned);
-            }
+            check_write(self, offset, bytes.len())?;
             let sector_id = (offset / SECTOR_SIZE) as u16;
             let page_id = (offset / PAGE_SIZE) as u8;
             self.write_page(sector_id.into(), page_id.into(), bytes)
         }
+    }
+
+    impl<const SIZE: u32, SPI, E> MultiwriteNorFlash for MX25R<SIZE, SPI>
+    where
+        SPI: SpiDevice<Error = E>,
+        SPI::Bus: SpiBus,
+        E: Debug,
+    {
     }
 }
