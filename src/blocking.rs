@@ -381,6 +381,7 @@ where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
 {
+    /// Enable write operation on the device
     pub fn enable_write(mut self) -> Result<MX25R<SIZE, SPI, WriteEnabled>, Error<E>> {
         self.mx25r_ll.write_enable()?;
         Ok(MX25R {
@@ -395,6 +396,7 @@ where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
 {
+    /// Disable write operation on the  device
     pub fn disabe_write(mut self) -> Result<MX25R<SIZE, SPI, WriteDisabled>, Error<E>> {
         self.mx25r_ll.write_disable()?;
         Ok(MX25R {
@@ -435,8 +437,7 @@ where
 
 }
 
-/// Implementation of the `NorFlash` trait of the `embedded_storage` crate. Note that you should enable write on the chip before using those traits.
-/// Or write a wrapper using typestates.
+/// Implementation of the `NorFlash` trait of the `embedded_storage` crate
 mod es {
     use crate::address::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
 
