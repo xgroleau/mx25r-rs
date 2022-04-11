@@ -10,7 +10,6 @@ Note that the drivers are low level to allow the user to write custom implementa
 * Use the embedded-hal crate instead of the embassy fork.
 * Add async suport
 * Add qspi support
-* Add typestate programming?
 
 ## Usage
 You can see an example of the usage for the `nRF52840-DK` in the [examples directory](./examples/nrf52840-dk). For now only a blocking API is available.

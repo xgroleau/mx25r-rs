@@ -18,14 +18,15 @@ use embassy_nrf::{
 use embedded_hal::spi::blocking::ExclusiveDevice;
 use mx25r::{
     address::{Address, Page, Sector},
-    blocking::MX25R6435F,
+    blocking::{MX25R6435F, WriteEnabled},
+    error::Error
 };
 use panic_probe as _;
 
-type DkMX25R<'a> = MX25R6435F<ExclusiveDevice<Spim<'a, TWISPI0>, Output<'a, P0_17>>>;
+type DkMX25R<'a> = MX25R6435F<ExclusiveDevice<Spim<'a, TWISPI0>, Output<'a, P0_17>>, WriteEnabled>;
 
 async fn wait_wip(mx25r: &mut DkMX25R<'_>) {
-    while mx25r.read_status().unwrap().wip_bit {
+    while let Err(Error::Busy) = mx25r.poll_wip() {
         Timer::after(Duration::from_millis(100)).await;
     }
 }
@@ -42,27 +43,21 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let cs = Output::new(p.P0_17, Level::High, OutputDrive::Standard);
     let spi_dev = ExclusiveDevice::new(spi, cs);
 
-    let mut memory = MX25R6435F::new(spi_dev);
+    let mut memory = MX25R6435F::new(spi_dev).enable_write().unwrap();
     let mut buff = [0];
 
-    memory.write_enable().unwrap();
     memory.chip_erase().unwrap();
     wait_wip(&mut memory).await;
-    info!("Status {}", memory.read_status().unwrap());
 
     let page = Page(0);
     let sector = Sector(0);
     let addr = Address::from_page(sector, page);
     info!("Writing 42");
     memory.write_page(sector, page, &[42]).unwrap();
+    wait_wip(&mut memory);
 
-    info!("Status {}", memory.read_status().unwrap());
     info!("Value before {}", buff);
     memory.read(addr, &mut buff).unwrap();
     info!("Value after {}", buff);
 
-    loop {
-        info!("Status {}", memory.read_status().unwrap());
-        Timer::after(Duration::from_millis(5000)).await;
-    }
 }
