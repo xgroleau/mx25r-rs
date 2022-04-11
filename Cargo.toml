@@ -2,6 +2,15 @@
 name = "mx25r"
 version = "0.1.0"
 edition = "2021"
+authors = ["xgroleau <grox2901@usherbrooke.ca>"]
+repository = "https://github.com/xgroleau/mx25r-rs"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/xgroleau/mx25r-rs"
+description = "Platform-agnostic Rust driver for the macronix MX25R NOR flash."
+documentation = "https://docs.rs/mx25r"
+readme = "README.md"
+keywords = ["nor-flash", "spi", "driver", "embedded-hal-driver"]
+categories = ["embedded", "hardware-support", "no-std"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
