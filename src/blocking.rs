@@ -8,28 +8,28 @@ use bit::BitIndex;
 use embedded_hal::spi::blocking::{SpiBus, SpiBusRead, SpiBusWrite, SpiDevice};
 
 /// Type alias for the MX25R512F
-pub type MX25R512F<SPI> = MX25R<0x00FFFF, SPI>;
+pub type MX25R512F<SPI, P> = MX25R<0x00FFFF, SPI, P>;
 
 /// Type alias for the MX25R1035F
-pub type MX25R1035F<SPI> = MX25R<0x01FFFF, SPI>;
+pub type MX25R1035F<SPI, P> = MX25R<0x01FFFF, SPI, P>;
 
 /// Type alias for the MX25R2035F
-pub type MX25R2035F<SPI> = MX25R<0x03FFFF, SPI>;
+pub type MX25R2035F<SPI, P> = MX25R<0x03FFFF, SPI, P>;
 
 /// Type alias for the MX25R4035F
-pub type MX25R4035F<SPI> = MX25R<0x07FFFF, SPI>;
+pub type MX25R4035F<SPI, P> = MX25R<0x07FFFF, SPI, P>;
 
 /// Type alias for the MX25R8035F
-pub type MX25R8035F<SPI> = MX25R<0x0FFFFF, SPI>;
+pub type MX25R8035F<SPI, P> = MX25R<0x0FFFFF, SPI, P>;
 
 /// Type alias for the MX25R1635F
-pub type MX25R1635F<SPI> = MX25R<0x1FFFFF, SPI>;
+pub type MX25R1635F<SPI, P> = MX25R<0x1FFFFF, SPI, P>;
 
 /// Type alias for the MX25R3235F
-pub type MX25R3235F<SPI> = MX25R<0x3FFFFF, SPI>;
+pub type MX25R3235F<SPI, P> = MX25R<0x3FFFFF, SPI, P>;
 
 /// Type alias for the MX25R6435F
-pub type MX25R6435F<SPI> = MX25R<0x7FFFFF, SPI>;
+pub type MX25R6435F<SPI, P> = MX25R<0x7FFFFF, SPI, P>;
 
 /// The generic low level MX25R driver
 pub struct MX25RLowLevel<const SIZE: u32, SPI>
@@ -333,20 +333,108 @@ where
     }
 }
 
-/// The generic low level MX25R driver
-pub struct MX25R<const SIZE: u32, SPI>
+
+// Type states chip write enabled
+pub struct WriteEnabled;
+pub struct WriteDisabled;
+
+/// The generic higher level driver for the mx25r. Safer and check if the wip bit is on for each transaction
+pub struct MX25R<const SIZE: u32, SPI, P>
 where
     SPI: SpiDevice,
     SPI::Bus: SpiBus,
 {
     mx25r_ll: MX25RLowLevel<SIZE, SPI>,
+    _write_permission: P,
+
 }
-impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI>
+
+impl<const SIZE: u32, SPI, E, P> MX25R<SIZE, SPI, P>
 where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
 {
+    /// Create a new instance
+    pub fn new(mx25r_ll: MX25RLowLevel<SIZE, SPI>) -> MX25R<SIZE, SPI, WriteDisabled> {
+        MX25R {
+            mx25r_ll,
+            _write_permission: WriteDisabled
+        }
+    }
+
+    /// Read n bytes quickly from an address
+    pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
+        self.mx25r_ll.read_fast(addr, buff)
+    }
+
+    /// Check if the chip has work in progess
+    pub fn poll_wip(&mut self) -> Result<(), Error<E>> {
+        if self.mx25r_ll.read_status()?.wip_bit {
+            return Err(Error::Busy);
+        }
+        Ok(())
+    } 
 }
+
+impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI, WriteDisabled>
+where
+    SPI: SpiDevice<Error = E>,
+    SPI::Bus: SpiBus,
+{
+    pub fn enable_write(mut self) -> Result<MX25R<SIZE, SPI, WriteEnabled>, Error<E>> {
+        self.mx25r_ll.write_enable()?;
+        Ok(MX25R {
+            mx25r_ll: self.mx25r_ll,
+            _write_permission: WriteEnabled
+        })
+    }
+}
+
+impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI, WriteEnabled>
+where
+    SPI: SpiDevice<Error = E>,
+    SPI::Bus: SpiBus,
+{
+    pub fn disabe_write(mut self) -> Result<MX25R<SIZE, SPI, WriteDisabled>, Error<E>> {
+        self.mx25r_ll.write_disable()?;
+        Ok(MX25R {
+            mx25r_ll: self.mx25r_ll,
+            _write_permission: WriteDisabled
+        })
+    }
+
+    /// Write n bytes to a page
+    pub fn write_page(&mut self, sector: Sector, page: Page, buff: &[u8]) -> Result<(), Error<E>> {
+        self.poll_wip()?;
+        self.mx25r_ll.write_page(sector, page, buff)
+    }
+
+    /// Erase a 4kB sector
+    pub fn sector_erase(&mut self, sector: Sector) -> Result<(), Error<E>> {
+        self.poll_wip()?;
+        self.mx25r_ll.sector_erase(sector)
+    }
+
+    /// Erase a 64kB block
+    pub fn block64_erase(&mut self, block: Block64) -> Result<(), Error<E>> {
+        self.poll_wip()?;
+        self.mx25r_ll.block64_erase(block)
+    }
+
+    /// Erase a 32kB block
+    pub fn block32_erase(&mut self, block: Block32) -> Result<(), Error<E>> {
+        self.poll_wip()?;
+        self.mx25r_ll.block32_erase(block)
+    }
+
+    /// Erase the whole chip
+    pub fn chip_erase(&mut self) -> Result<(), Error<E>> {
+        self.poll_wip()?;
+        self.mx25r_ll.chip_erase()
+    } 
+
+}
+
 /// Implementation of the `NorFlash` trait of the `embedded_storage` crate. Note that you should enable write on the chip before using those traits.
 /// Or write a wrapper using typestates.
 mod es {
@@ -379,11 +467,12 @@ mod es {
                 Error::NotAligned => NorFlashErrorKind::NotAligned,
                 Error::Value => NorFlashErrorKind::Other,
                 Error::Spi(_) => NorFlashErrorKind::Other,
+                Error::Busy => NorFlashErrorKind::Other,
             }
         }
     }
 
-    impl<const SIZE: u32, SPI, E> ErrorType for MX25R<SIZE, SPI>
+    impl<const SIZE: u32, SPI, E, P> ErrorType for MX25R<SIZE, SPI, P>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,
@@ -392,7 +481,7 @@ mod es {
         type Error = Error<E>;
     }
 
-    impl<const SIZE: u32, SPI, E> ReadNorFlash for MX25R<SIZE, SPI>
+    impl<const SIZE: u32, SPI, E, P> ReadNorFlash for MX25R<SIZE, SPI, P>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,
@@ -405,7 +494,7 @@ mod es {
             if offset > SIZE {
                 return Err(Error::OutOfBounds);
             }
-            self.read_fast(Address(offset), bytes)
+            self.read(Address(offset), bytes)
         }
 
         fn capacity(&self) -> usize {
@@ -413,7 +502,7 @@ mod es {
         }
     }
 
-    impl<const SIZE: u32, SPI, E> NorFlash for MX25R<SIZE, SPI>
+    impl<const SIZE: u32, SPI, E> NorFlash for MX25R<SIZE, SPI, WriteEnabled>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,
@@ -450,7 +539,7 @@ mod es {
         }
     }
 
-    impl<const SIZE: u32, SPI, E> MultiwriteNorFlash for MX25R<SIZE, SPI>
+    impl<const SIZE: u32, SPI, E> MultiwriteNorFlash for MX25R<SIZE, SPI, WriteEnabled>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,

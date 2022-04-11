@@ -12,4 +12,7 @@ pub enum Error<SpiError> {
 
     /// Address not aligned
     NotAligned,
+
+    /// The device is busy
+    Busy,
 }
