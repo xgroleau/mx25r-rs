@@ -14,6 +14,7 @@
 pub mod address;
 pub mod blocking;
 mod command;
+pub mod error;
 pub mod register;
 
 #[cfg(test)]

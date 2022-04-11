@@ -1,14 +1,26 @@
 # mx25r-rs
-Driver for the MX25R chip using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**.
+Low level driver crate for the MX25R chip using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**.
+
+This driver implements all the commands available to the MX25R chip series, but quad spi is not supported yet.
+
+Note that the drivers are low level to allow the user to write custom implementation for it's needs.
 
 ## TODO
 * Complete example to test most features
 * Use the embedded-hal crate instead of the embassy fork.
 * Add async suport
-* Implement [embedded_storage nor_flash trait](https://docs.rs/embedded-storage/latest/embedded_storage/nor_flash/index.html)
+* Add qspi support
+* Add typestate programming?
 
 ## Usage
 You can see an example of the usage for the `nRF52840-DK` in the [examples directory](./examples/nrf52840-dk). For now only a blocking API is available.
+
+Things to consider when using the driver crate
+
+* Enable write before erasing sector/block/chip or writing data to the memory
+  * Even when using the `embedded_storage` `NorFlash` trait
+* Poll the wip bit before read/write/erase operation, if not the request will be ignored
+* `write_security_register` is not a reversable operation, make sure to read the datasheet
 
 ## License
 

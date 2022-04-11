@@ -4,12 +4,12 @@
 pub enum Command {
     Read = 0x03,
     ReadF = 0x0B,
-    Read2 = 0xBB,
-    ReadD = 0x3B,
-    Read4 = 0xEB,
-    ReadQ = 0x6B,
+    //Read2 = 0xBB,
+    //ReadD = 0x3B,
+    //Read4 = 0xEB,
+    //ReadQ = 0x6B,
     ProgramPage = 0x02,
-    ProgramPage4 = 0x38,
+    //ProgramPage4 = 0x38,
     SectorErase = 0x20,
     BlockErase32 = 0x52,
     BlockErase = 0xD8,
@@ -34,4 +34,5 @@ pub enum Command {
     Nop = 0x00,
     ResetEnable = 0x66,
     ResetMemory = 0x99,
+    Dummy = 0xFF,
 }

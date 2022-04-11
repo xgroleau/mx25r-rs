@@ -2,11 +2,10 @@ use crate::{
     address::{self, Address, Block32, Block64, Page, Sector},
     command::Command,
     register::*,
+    error::Error,
 };
 use bit::BitIndex;
 use embedded_hal::spi::blocking::{SpiBus, SpiBusRead, SpiBusWrite, SpiDevice};
-
-const DUMMY: u8 = 0xFF;
 
 /// Type alias for the MX25R512F
 pub type MX25R512F<SPI> = MX25R<0x00FFFF, SPI>;
@@ -32,24 +31,8 @@ pub type MX25R3235F<SPI> = MX25R<0x3FFFFF, SPI>;
 /// Type alias for the MX25R6435F
 pub type MX25R6435F<SPI> = MX25R<0x7FFFFF, SPI>;
 
-/// All possible errors emitted by the driver
-#[derive(Debug, Clone, Copy)]
-pub enum Error<SpiError> {
-    /// Internal Spi error
-    Spi(SpiError),
-
-    /// Invalid value passed
-    Value,
-
-    /// Address out of bound
-    OutOfBounds,
-
-    /// Address not aligned
-    NotAligned,
-}
-
-/// The generic MX25R driver
-pub struct MX25R<const SIZE: u32, SPI>
+/// The generic low level MX25R driver
+pub struct MX25RLowLevel<const SIZE: u32, SPI>
 where
     SPI: SpiDevice,
     SPI::Bus: SpiBus,
@@ -57,7 +40,7 @@ where
     spi: SPI,
 }
 
-impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI>
+impl<const SIZE: u32, SPI, E> MX25RLowLevel<SIZE, SPI>
 where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
@@ -129,7 +112,7 @@ where
             (addr_val >> 16) as u8,
             (addr_val >> 8) as u8,
             addr_val as u8,
-            DUMMY,
+            Command::Dummy as u8,
         ];
 
         self.spi
@@ -157,76 +140,61 @@ where
             .map_err(Error::Spi)
     }
 
+    /// Read n bytes from an addresss
     pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
         self.read_base(addr, Command::Read, buff)
     }
 
+    /// Read n bytes quickly from an address
     pub fn read_fast(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
         self.read_base_dummy(addr, Command::ReadF, buff)
     }
 
-    pub fn read_2io(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
-        self.read_base_dummy(addr, Command::Read2, buff)
-    }
-
-    pub fn read_1i2o(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
-        self.read_base_dummy(addr, Command::ReadD, buff)
-    }
-
-    pub fn read_4io(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
-        self.read_base_dummy(addr, Command::Read4, buff)
-    }
-
-    pub fn read_1i4o(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
-        self.read_base_dummy(addr, Command::ReadQ, buff)
-    }
-
+    /// Write n bytes to a page. Write must be enabled, see `write_enable`
     pub fn write_page(&mut self, sector: Sector, page: Page, buff: &[u8]) -> Result<(), Error<E>> {
         let addr = Address::from_page(sector, page);
         self.write_base(addr, Command::ProgramPage, buff)
     }
 
-    pub fn write_page_quad(
-        &mut self,
-        sector: Sector,
-        page: Page,
-        buff: &[u8],
-    ) -> Result<(), Error<E>> {
-        let addr = Address::from_page(sector, page);
-        self.write_base(addr, Command::ProgramPage4, buff)
-    }
-
+    /// Erase a 4kB sector. Write must be enabled, see `write_enable`
     pub fn sector_erase(&mut self, sector: Sector) -> Result<(), Error<E>> {
         let addr = Address::from_sector(sector);
         self.addr_command(addr, Command::SectorErase)
     }
 
+    /// Erase a 64kB block. Write must be enabled, see `write_enable`
     pub fn block64_erase(&mut self, block: Block64) -> Result<(), Error<E>> {
         let addr = Address::from_block64(block);
         self.addr_command(addr, Command::BlockErase)
     }
 
+    /// Erase a 32kB block. Write must be enabled, see `write_enable`
     pub fn block32_erase(&mut self, block: Block32) -> Result<(), Error<E>> {
         let addr = Address::from_block32(block);
         self.addr_command(addr, Command::BlockErase32)
     }
 
+    /// Erase the whole chip. Write must be enabled, see `write_enable`
     pub fn chip_erase(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ChipErase as u8])
     }
 
+    /// Read using the Serial Flash Discoverable Parameter instruction
     pub fn read_sfdp(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
         self.read_base_dummy(addr, Command::ReadSfdp, buff)
     }
 
+    /// Enable write operation
     pub fn write_enable(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::WriteEnable as u8])
     }
 
+    /// Disable write
     pub fn write_disable(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::WriteDisable as u8])
     }
 
+    /// Read the status register
     pub fn read_status(&mut self) -> Result<StatusRegister, Error<E>> {
         let mut command: [u8; 2] = [Command::ReadStatus as u8, 0];
 
@@ -234,6 +202,7 @@ where
         Ok(command[1].into())
     }
 
+    /// Read the configuration register
     pub fn read_configuration(&mut self) -> Result<ConfigurationRegister, Error<E>> {
         let mut command: [u8; 3] = [Command::ReadConfig as u8, 0, 0];
         self.command_transfer(&mut command)?;
@@ -244,6 +213,7 @@ where
         })
     }
 
+    /// Write configuration to the configuration register
     pub fn write_configuration(
         &mut self,
         block_protected: u8,
@@ -268,22 +238,27 @@ where
         Ok(())
     }
 
+    /// Suspend the pogram erase
     pub fn suspend_program_erase(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ProgramEraseSuspend as u8])
     }
 
+    /// Resume program erase
     pub fn resume_program_erase(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ProgramEraseResume as u8])
     }
 
+    /// Deep powerdown the chip
     pub fn deep_power_down(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::DeepPowerDown as u8])
     }
 
+    /// Set the burst length
     pub fn set_burst_length(&mut self, burst_length: u8) -> Result<(), Error<E>> {
         self.command_write(&[Command::SetBurstLength as u8, burst_length])
     }
 
+    /// Read the identification of the device
     pub fn read_identification(
         &mut self,
     ) -> Result<(ManufacturerId, MemoryType, MemoryDensity), Error<E>> {
@@ -296,26 +271,34 @@ where
         ))
     }
 
+    /// Read the electronic signature of the device
     pub fn read_electronic_id(&mut self) -> Result<ElectronicId, Error<E>> {
-        let mut command = [Command::ReadElectronicId as u8, DUMMY, DUMMY, DUMMY, 0];
+        let dummy = Command::Dummy as u8;
+        let mut command = [Command::ReadElectronicId as u8, dummy, dummy, dummy, 0];
         self.command_transfer(&mut command)?;
         Ok(ElectronicId(command[4]))
     }
 
+    /// Read the manufacturer ID and the device ID
     pub fn read_manufacturer_id(&mut self) -> Result<(ManufacturerId, DeviceId), Error<E>> {
-        let mut command = [Command::ReadManufacturerId as u8, DUMMY, DUMMY, 0x00, 0, 0];
+        let dummy = Command::Dummy as u8;
+        let mut command = [Command::ReadManufacturerId as u8, dummy, dummy, 0x00, 0, 0];
         self.command_transfer(&mut command)?;
         Ok((ManufacturerId(command[4]), DeviceId(command[5])))
     }
 
+    /// Enter to access additionnal 8kB of secured memory, 
+    /// which is independent of the main array. Note that it cannot be updated once locked down. See [`write_security_register`]
     pub fn enter_secure_opt(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::EnterSecureOTP as u8])
     }
 
+    /// Exit the secured OTP
     pub fn exit_secure_opt(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ExitSecureOTP as u8])
     }
 
+    /// Read the security register
     pub fn read_security_register(&mut self) -> Result<SecurityRegister, Error<E>> {
         let mut command = [Command::ReadSecurityRegister as u8, 0];
         self.command_transfer(&mut command)?;
@@ -329,27 +312,43 @@ where
         })
     }
 
-    // TODO: Check the right way to put a warning
-    #[deprecated(
-        note = "Warning: This function will lock your security register, make sure you understand the implications"
-    )]
+    /// Write the security register, note that this operation is **NON REVERSIBLE**
     pub fn write_security_register(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::WriteSecurityRegister as u8])
     }
 
+    /// No operation, can terminate a reset enabler
     pub fn nop(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::Nop as u8])
     }
 
+    /// Enable reset
     pub fn reset_enable(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ResetEnable as u8])
     }
 
+    /// Reset the chip, note that the chip must have reset enabled. See `reset_enable`
     pub fn reset(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ResetMemory as u8])
     }
 }
 
+/// The generic low level MX25R driver
+pub struct MX25R<const SIZE: u32, SPI>
+where
+    SPI: SpiDevice,
+    SPI::Bus: SpiBus,
+{
+    mx25r_ll: MX25RLowLevel<SIZE, SPI>,
+}
+impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI>
+where
+    SPI: SpiDevice<Error = E>,
+    SPI::Bus: SpiBus,
+{
+}
+/// Implementation of the `NorFlash` trait of the `embedded_storage` crate. Note that you should enable write on the chip before using those traits.
+/// Or write a wrapper using typestates.
 mod es {
     use crate::address::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
 
@@ -406,7 +405,7 @@ mod es {
             if offset > SIZE {
                 return Err(Error::OutOfBounds);
             }
-            self.read(Address(offset), bytes)
+            self.read_fast(Address(offset), bytes)
         }
 
         fn capacity(&self) -> usize {
