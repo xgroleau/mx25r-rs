@@ -16,12 +16,11 @@ exclude = [
     "flake.nix",
     "flake.lock",
     ".envrc",
-    
 ]
 
 [dependencies]
 # TODO: Migrate to embedded-hal repo
-embedded-hal = { package = "embedded-hal", version = "1.0.0-alpha.7", git = "https://github.com/embassy-rs/embedded-hal", branch = "embassy2" }
+embedded-hal = { version = "1.0.0-alpha.7", git = "https://github.com/embassy-rs/embedded-hal", branch = "embassy2" }
 bit = "0.1.1"
 defmt = { version = "0.3", optional = true }
 embedded-storage = "0.3.0"
