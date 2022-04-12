@@ -4,13 +4,6 @@ name = "nrf52840-dk"
 edition = "2018"
 version = "0.1.0"
 
-[lib]
-harness = false
-
-# needed for each integration test
-[[test]]
-name = "integration"
-harness = false
 
 [dependencies]
 embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nightly", "unstable-traits"] }

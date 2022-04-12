@@ -157,25 +157,25 @@ where
     }
 
     /// Erase a 4kB sector. Write must be enabled, see `write_enable`
-    pub fn sector_erase(&mut self, sector: Sector) -> Result<(), Error<E>> {
+    pub fn erase_sector(&mut self, sector: Sector) -> Result<(), Error<E>> {
         let addr = Address::from_sector(sector);
         self.addr_command(addr, Command::SectorErase)
     }
 
     /// Erase a 64kB block. Write must be enabled, see `write_enable`
-    pub fn block64_erase(&mut self, block: Block64) -> Result<(), Error<E>> {
+    pub fn erase_block64(&mut self, block: Block64) -> Result<(), Error<E>> {
         let addr = Address::from_block64(block);
         self.addr_command(addr, Command::BlockErase)
     }
 
     /// Erase a 32kB block. Write must be enabled, see `write_enable`
-    pub fn block32_erase(&mut self, block: Block32) -> Result<(), Error<E>> {
+    pub fn erase_block32(&mut self, block: Block32) -> Result<(), Error<E>> {
         let addr = Address::from_block32(block);
         self.addr_command(addr, Command::BlockErase32)
     }
 
     /// Erase the whole chip. Write must be enabled, see `write_enable`
-    pub fn chip_erase(&mut self) -> Result<(), Error<E>> {
+    pub fn erase_chip(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ChipErase as u8])
     }
 
@@ -413,27 +413,27 @@ where
     }
 
     /// Erase a 4kB sector
-    pub fn sector_erase(&mut self, sector: Sector) -> Result<(), Error<E>> {
+    pub fn erase_sector(&mut self, sector: Sector) -> Result<(), Error<E>> {
         self.poll_wip()?;
-        self.mx25r_ll.sector_erase(sector)
+        self.mx25r_ll.erase_sector(sector)
     }
 
     /// Erase a 64kB block
-    pub fn block64_erase(&mut self, block: Block64) -> Result<(), Error<E>> {
+    pub fn erase_block64(&mut self, block: Block64) -> Result<(), Error<E>> {
         self.poll_wip()?;
-        self.mx25r_ll.block64_erase(block)
+        self.mx25r_ll.erase_block64(block)
     }
 
     /// Erase a 32kB block
-    pub fn block32_erase(&mut self, block: Block32) -> Result<(), Error<E>> {
+    pub fn erase_block32(&mut self, block: Block32) -> Result<(), Error<E>> {
         self.poll_wip()?;
-        self.mx25r_ll.block32_erase(block)
+        self.mx25r_ll.erase_block32(block)
     }
 
     /// Erase the whole chip
-    pub fn chip_erase(&mut self) -> Result<(), Error<E>> {
+    pub fn erase_chip(&mut self) -> Result<(), Error<E>> {
         self.poll_wip()?;
-        self.mx25r_ll.chip_erase()
+        self.mx25r_ll.erase_chip()
     } 
 
 }
@@ -520,15 +520,15 @@ mod es {
             match addr_diff {
                 SECTOR_SIZE => {
                     let sector = Sector((from / SECTOR_SIZE) as u16);
-                    self.sector_erase(sector)
+                    self.erase_sector(sector)
                 }
                 BLOCK32_SIZE => {
                     let block = Block32((from / BLOCK32_SIZE) as u16);
-                    self.block32_erase(block)
+                    self.erase_block32(block)
                 }
                 BLOCK64_SIZE => {
                     let block = Block64((from / BLOCK64_SIZE) as u16);
-                    self.block64_erase(block)
+                    self.erase_block64(block)
                 }
                 _ => Err(Error::NotAligned),
             }
