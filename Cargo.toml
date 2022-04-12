@@ -12,7 +12,6 @@ readme = "README.md"
 keywords = ["nor-flash", "spi", "driver", "embedded-hal-driver"]
 categories = ["embedded", "hardware-support", "no-std"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 # TODO: Migrate to embedded-hal repo
@@ -20,3 +19,14 @@ embedded-hal = { package = "embedded-hal", version = "1.0.0-alpha.7", git = "htt
 bit = "0.1.1"
 defmt = { version = "0.3", optional = true }
 embedded-storage = "0.3.0"
+
+[dev-dependencies]
+cortex-m = "0.7.3"
+cortex-m-rt = "0.7.0"
+embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nightly", "unstable-traits"] }
+embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-traits"] }
+
+defmt = "0.3"
+defmt-rtt = "0.3"
+
+panic-probe = { version = "0.3", features = ["print-defmt"] }

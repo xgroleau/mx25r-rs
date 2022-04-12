@@ -46,7 +46,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
 
     let mut memory = MX25R6435F::new(spi_dev);
 
-    let mut buff = [0, 0, 0, 0, 0];
+    let mut buff = [0];
     let page = Page(0);
     let sector = Sector(0);
     let addr = Address::from_page(sector, page);
@@ -59,12 +59,16 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     wait_wip(&mut memory).await;
 
     memory.read_fast(addr, &mut buff).unwrap();
-    info!("Value after erase {}", buff);
+    assert_eq!(buff[0], 0xff);
 
     info!("Writing 42");
     memory.write_page(sector, page, &[42]).unwrap();
     wait_wip(&mut memory).await;
 
     memory.read_fast(addr, &mut buff).unwrap();
-    info!("Value after write {}", buff);
+    assert_eq!(buff[0], 42);
+
+    // Exit
+    info!("Example completed");
+    cortex_m::asm::bkpt();
 }

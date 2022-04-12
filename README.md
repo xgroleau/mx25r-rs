@@ -12,7 +12,7 @@ Note that the drivers are low level to allow the user to write custom implementa
 * Add qspi support
 
 ## Usage
-You can see an example of the usage for the `nRF52840-DK` in the [examples directory](./examples/nrf52840-dk). For now only a blocking API is available.
+You can see an example of the usage for the `nRF52840-DK` in the [examples directory](./examples). For now only a blocking API is available.
 
 Things to consider when using the driver crate
 
@@ -20,6 +20,9 @@ Things to consider when using the driver crate
   * Even when using the `embedded_storage` `NorFlash` trait
 * Poll the wip bit before read/write/erase operation, if not the request will be ignored
 * `write_security_register` is not a reversable operation, make sure to read the datasheet
+
+### Nix
+A [nix flake](https://nixos.wiki/wiki/Flakes) is available to ease development.
 
 ## License
 
