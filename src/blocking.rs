@@ -354,13 +354,6 @@ where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
 {
-    /// Create a new instance
-    pub fn new(spi: SPI) -> MX25R<SIZE, SPI, WriteDisabled> {
-        MX25R {
-            mx25r_ll: MX25RLowLevel::new(spi),
-            _write_permission: WriteDisabled
-        }
-    }
 
     /// Read n bytes quickly from an address
     pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
@@ -381,6 +374,14 @@ where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
 {
+    /// Create a new instance
+    pub fn new(spi: SPI) -> MX25R<SIZE, SPI, WriteDisabled> {
+        MX25R {
+            mx25r_ll: MX25RLowLevel::new(spi),
+            _write_permission: WriteDisabled
+        }
+    }
+
     /// Enable write operation on the device
     pub fn enable_write(mut self) -> Result<MX25R<SIZE, SPI, WriteEnabled>, Error<E>> {
         self.mx25r_ll.write_enable()?;
