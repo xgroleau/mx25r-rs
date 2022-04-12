@@ -5,34 +5,34 @@ use crate::{
     error::Error,
 };
 use bit::BitIndex;
-use embedded_hal::spi::blocking::{SpiBus, SpiBusRead, SpiBusWrite, SpiDevice};
+use embedded_hal::spi::blocking::{SpiBus, SpiBusRead, SpiBusWrite, SpiDevice, SpiBusFlush};
 
 /// Type alias for the MX25R512F
-pub type MX25R512F<SPI, P> = MX25R<0x00FFFF, SPI, P>;
+pub type MX25R512F<SPI> = MX25R<0x00FFFF, SPI>;
 
 /// Type alias for the MX25R1035F
-pub type MX25R1035F<SPI, P> = MX25R<0x01FFFF, SPI, P>;
+pub type MX25R1035F<SPI> = MX25R<0x01FFFF, SPI>;
 
 /// Type alias for the MX25R2035F
-pub type MX25R2035F<SPI, P> = MX25R<0x03FFFF, SPI, P>;
+pub type MX25R2035F<SPI> = MX25R<0x03FFFF, SPI>;
 
 /// Type alias for the MX25R4035F
-pub type MX25R4035F<SPI, P> = MX25R<0x07FFFF, SPI, P>;
+pub type MX25R4035F<SPI> = MX25R<0x07FFFF, SPI>;
 
 /// Type alias for the MX25R8035F
-pub type MX25R8035F<SPI, P> = MX25R<0x0FFFFF, SPI, P>;
+pub type MX25R8035F<SPI> = MX25R<0x0FFFFF, SPI>;
 
 /// Type alias for the MX25R1635F
-pub type MX25R1635F<SPI, P> = MX25R<0x1FFFFF, SPI, P>;
+pub type MX25R1635F<SPI> = MX25R<0x1FFFFF, SPI>;
 
 /// Type alias for the MX25R3235F
-pub type MX25R3235F<SPI, P> = MX25R<0x3FFFFF, SPI, P>;
+pub type MX25R3235F<SPI> = MX25R<0x3FFFFF, SPI>;
 
 /// Type alias for the MX25R6435F
-pub type MX25R6435F<SPI, P> = MX25R<0x7FFFFF, SPI, P>;
+pub type MX25R6435F<SPI> = MX25R<0x7FFFFF, SPI>;
 
 /// The generic low level MX25R driver
-pub struct MX25RLowLevel<const SIZE: u32, SPI>
+pub struct MX25R<const SIZE: u32, SPI>
 where
     SPI: SpiDevice,
     SPI::Bus: SpiBus,
@@ -40,7 +40,7 @@ where
     spi: SPI,
 }
 
-impl<const SIZE: u32, SPI, E> MX25RLowLevel<SIZE, SPI>
+impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI>
 where
     SPI: SpiDevice<Error = E>,
     SPI::Bus: SpiBus,
@@ -135,12 +135,19 @@ where
         self.spi
             .transaction(|bus| {
                 bus.write(&cmd)?;
-                bus.write(buff)
+                bus.write(buff)?;
+                bus.flush()
             })
-            .map_err(Error::Spi)
+            .map_err(Error::Spi)?;
+            Ok(())
     }
 
-    /// Read n bytes from an addresss
+    fn prepare_write(&mut self) -> Result<(), Error<E>>{
+        self.poll_wip()?;
+        self.write_enable()
+    }
+
+    /// Read n bytes from an addresss, note that you should maybe use [`Self::read_fast`] instead
     pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
         self.read_base(addr, Command::Read, buff)
     }
@@ -150,32 +157,37 @@ where
         self.read_base_dummy(addr, Command::ReadF, buff)
     }
 
-    /// Write n bytes to a page. Write must be enabled, see `write_enable`
+    /// Write n bytes to a page. [`Self::write_enable`] is called internally
     pub fn write_page(&mut self, sector: Sector, page: Page, buff: &[u8]) -> Result<(), Error<E>> {
         let addr = Address::from_page(sector, page);
+        self.prepare_write()?;
         self.write_base(addr, Command::ProgramPage, buff)
     }
 
-    /// Erase a 4kB sector. Write must be enabled, see `write_enable`
+    /// Erase a 4kB sector. [`Self::write_enable`] is called internally
     pub fn erase_sector(&mut self, sector: Sector) -> Result<(), Error<E>> {
         let addr = Address::from_sector(sector);
+        self.prepare_write()?;
         self.addr_command(addr, Command::SectorErase)
     }
 
-    /// Erase a 64kB block. Write must be enabled, see `write_enable`
+    /// Erase a 64kB block. [`Self::write_enable`] is called internally
     pub fn erase_block64(&mut self, block: Block64) -> Result<(), Error<E>> {
         let addr = Address::from_block64(block);
+        self.prepare_write()?;
         self.addr_command(addr, Command::BlockErase)
     }
 
-    /// Erase a 32kB block. Write must be enabled, see `write_enable`
+    /// Erase a 32kB block. [`Self::write_enable`] is called internally
     pub fn erase_block32(&mut self, block: Block32) -> Result<(), Error<E>> {
         let addr = Address::from_block32(block);
+        self.prepare_write()?;
         self.addr_command(addr, Command::BlockErase32)
     }
 
-    /// Erase the whole chip. Write must be enabled, see `write_enable`
+    /// Erase the whole chip. [`Self::write_enable`] is called internally
     pub fn erase_chip(&mut self) -> Result<(), Error<E>> {
+        self.prepare_write()?;
         self.command_write(&[Command::ChipErase as u8])
     }
 
@@ -184,8 +196,8 @@ where
         self.read_base_dummy(addr, Command::ReadSfdp, buff)
     }
 
-    /// Enable write operation
-    pub fn write_enable(&mut self) -> Result<(), Error<E>> {
+    /// Enable write operation, though you shouldn't need this function since it's already handled in the write/erase operations.
+    fn write_enable(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::WriteEnable as u8])
     }
 
@@ -202,6 +214,14 @@ where
         Ok(command[1].into())
     }
 
+    /// Read the wip bit, just less noisy than the `read_status().unwrap().wip_bit`
+    pub fn poll_wip(&mut self) -> Result<(), Error<E>>{
+        if self.read_status()?.wip_bit {
+            return Err(Error::Busy);
+        }
+        Ok(())
+    }
+
     /// Read the configuration register
     pub fn read_configuration(&mut self) -> Result<ConfigurationRegister, Error<E>> {
         let mut command: [u8; 3] = [Command::ReadConfig as u8, 0, 0];
@@ -213,7 +233,7 @@ where
         })
     }
 
-    /// Write configuration to the configuration register
+    /// Write configuration to the configuration register. [`Self::write_enable`] is called internally
     pub fn write_configuration(
         &mut self,
         block_protected: u8,
@@ -226,7 +246,7 @@ where
         if block_protected > 0x0F {
             return Err(Error::Value);
         }
-
+        self.prepare_write()?;
         let mut command: [u8; 4] = [Command::WriteStatus as u8, 0, 0, 0];
         command[1].set_bit_range(2..6, block_protected);
         command[1].set_bit(6, quad_enable);
@@ -288,7 +308,7 @@ where
     }
 
     /// Enter to access additionnal 8kB of secured memory, 
-    /// which is independent of the main array. Note that it cannot be updated once locked down. See [`write_security_register`]
+    /// which is independent of the main array. Note that it cannot be updated once locked down. See [`Self::write_security_register`]
     pub fn enter_secure_opt(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::EnterSecureOTP as u8])
     }
@@ -322,123 +342,19 @@ where
         self.command_write(&[Command::Nop as u8])
     }
 
-    /// Enable reset
+    /// Enable reset, though you shouldn't need this function since it's already handled in the reset operation.
     pub fn reset_enable(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::ResetEnable as u8])
     }
 
-    /// Reset the chip, note that the chip must have reset enabled. See `reset_enable`
+    /// Reset the chip. [`Self::reset_enable`] is called internally
     pub fn reset(&mut self) -> Result<(), Error<E>> {
+        self.reset_enable()?;
         self.command_write(&[Command::ResetMemory as u8])
     }
 }
 
-
-// Type states chip write enabled
-pub struct WriteEnabled;
-pub struct WriteDisabled;
-
-/// The generic higher level driver for the mx25r. Safer and check if the wip bit is on for each transaction
-pub struct MX25R<const SIZE: u32, SPI, P>
-where
-    SPI: SpiDevice,
-    SPI::Bus: SpiBus,
-{
-    mx25r_ll: MX25RLowLevel<SIZE, SPI>,
-    _write_permission: P,
-
-}
-
-impl<const SIZE: u32, SPI, E, P> MX25R<SIZE, SPI, P>
-where
-    SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
-{
-
-    /// Read n bytes quickly from an address
-    pub fn read(&mut self, addr: Address, buff: &mut [u8]) -> Result<(), Error<E>> {
-        self.mx25r_ll.read_fast(addr, buff)
-    }
-
-    /// Check if the chip has work in progess
-    pub fn poll_wip(&mut self) -> Result<(), Error<E>> {
-        if self.mx25r_ll.read_status()?.wip_bit {
-            return Err(Error::Busy);
-        }
-        Ok(())
-    } 
-}
-
-impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI, WriteDisabled>
-where
-    SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
-{
-    /// Create a new instance
-    pub fn new(spi: SPI) -> MX25R<SIZE, SPI, WriteDisabled> {
-        MX25R {
-            mx25r_ll: MX25RLowLevel::new(spi),
-            _write_permission: WriteDisabled
-        }
-    }
-
-    /// Enable write operation on the device
-    pub fn enable_write(mut self) -> Result<MX25R<SIZE, SPI, WriteEnabled>, Error<E>> {
-        self.mx25r_ll.write_enable()?;
-        Ok(MX25R {
-            mx25r_ll: self.mx25r_ll,
-            _write_permission: WriteEnabled
-        })
-    }
-}
-
-impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI, WriteEnabled>
-where
-    SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
-{
-    /// Disable write operation on the  device
-    pub fn disabe_write(mut self) -> Result<MX25R<SIZE, SPI, WriteDisabled>, Error<E>> {
-        self.mx25r_ll.write_disable()?;
-        Ok(MX25R {
-            mx25r_ll: self.mx25r_ll,
-            _write_permission: WriteDisabled
-        })
-    }
-
-    /// Write n bytes to a page
-    pub fn write_page(&mut self, sector: Sector, page: Page, buff: &[u8]) -> Result<(), Error<E>> {
-        self.poll_wip()?;
-        self.mx25r_ll.write_page(sector, page, buff)
-    }
-
-    /// Erase a 4kB sector
-    pub fn erase_sector(&mut self, sector: Sector) -> Result<(), Error<E>> {
-        self.poll_wip()?;
-        self.mx25r_ll.erase_sector(sector)
-    }
-
-    /// Erase a 64kB block
-    pub fn erase_block64(&mut self, block: Block64) -> Result<(), Error<E>> {
-        self.poll_wip()?;
-        self.mx25r_ll.erase_block64(block)
-    }
-
-    /// Erase a 32kB block
-    pub fn erase_block32(&mut self, block: Block32) -> Result<(), Error<E>> {
-        self.poll_wip()?;
-        self.mx25r_ll.erase_block32(block)
-    }
-
-    /// Erase the whole chip
-    pub fn erase_chip(&mut self) -> Result<(), Error<E>> {
-        self.poll_wip()?;
-        self.mx25r_ll.erase_chip()
-    } 
-
-}
-
-/// Implementation of the `NorFlash` trait of the `embedded_storage` crate
+/// Implementation of the [`NorFlash`](embedded_storage::nor_flash) trait of the  crate
 mod es {
     use crate::address::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
 
@@ -475,7 +391,7 @@ mod es {
         }
     }
 
-    impl<const SIZE: u32, SPI, E, P> ErrorType for MX25R<SIZE, SPI, P>
+    impl<const SIZE: u32, SPI, E> ErrorType for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,
@@ -484,7 +400,7 @@ mod es {
         type Error = Error<E>;
     }
 
-    impl<const SIZE: u32, SPI, E, P> ReadNorFlash for MX25R<SIZE, SPI, P>
+    impl<const SIZE: u32, SPI, E> ReadNorFlash for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,
@@ -497,7 +413,7 @@ mod es {
             if offset > SIZE {
                 return Err(Error::OutOfBounds);
             }
-            self.read(Address(offset), bytes)
+            self.read_fast(Address(offset), bytes)
         }
 
         fn capacity(&self) -> usize {
@@ -505,7 +421,7 @@ mod es {
         }
     }
 
-    impl<const SIZE: u32, SPI, E> NorFlash for MX25R<SIZE, SPI, WriteEnabled>
+    impl<const SIZE: u32, SPI, E> NorFlash for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,
@@ -542,7 +458,7 @@ mod es {
         }
     }
 
-    impl<const SIZE: u32, SPI, E> MultiwriteNorFlash for MX25R<SIZE, SPI, WriteEnabled>
+    impl<const SIZE: u32, SPI, E> MultiwriteNorFlash for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
         SPI::Bus: SpiBus,
