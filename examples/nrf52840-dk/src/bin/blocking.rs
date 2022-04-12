@@ -41,15 +41,24 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     // See https://infocenter.nordicsemi.com/index.jsp?topic=%2Fug_nrf52840_dk%2FUG%2Fdk%2Fhw_external_memory.html
     let mut spi = Spim::new(p.TWISPI0, irq, p.P0_19, p.P0_21, p.P0_20, spi_config);
     let cs = Output::new(p.P0_17, Level::High, OutputDrive::Standard);
-    
+
+    cs.is_set_low();
+    spi.blocking_write(&[0x06]).unwrap();
     cs.is_set_high();
+
+    cs.is_set_low();
     spi.blocking_write(&[2, 0, 0, 0, 42]).unwrap();
+    cs.is_set_high();
+
     cs.is_set_low();
     Timer::after(Duration::from_millis(1000)).await;
     cs.is_set_high();
-    let mut buff = [3, 0, 0, 0, 0, 0, 0 , 0];
-    spi.blocking_transfer_in_place(&mut buff).unwrap();
+
     cs.is_set_low();
+    let mut buff = [3, 0, 0, 0, 0, 0, 0, 0];
+    spi.blocking_transfer_in_place(&mut buff).unwrap();
+    cs.is_set_high();
+
     info!("Value {}", buff);
 
     let spi_dev = ExclusiveDevice::new(spi, cs);
@@ -73,7 +82,7 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     info!("Value after erase {}", buff);
 
     info!("Writing 42");
-    memory.write_page(sector, page, &[42]).unwrap();
+    memory.write_page(sector, page, &[43]).unwrap();
     info!("Status {}", memory.read_status().unwrap());
     //wait_wip(&mut memory).await;
 
