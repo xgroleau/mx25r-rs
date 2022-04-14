@@ -12,3 +12,5 @@ Cargo.lock
 examples/nrf52840-dk/.direnv/
 
 examples/nrf52840-dk/.projectile
+
+.direnv/
