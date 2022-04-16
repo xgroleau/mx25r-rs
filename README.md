@@ -1,8 +1,8 @@
 # mx25r-rs
-  * [ ] Platform-agnostic Rust driver for the macronix MX25R NOR flash using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**.
+Platform-agnostic Rust driver for the macronix MX25R NOR flash using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**.
 
-This driver implements all the commands available to the MX25R chip series, but quad spi is not supported yet.
 
+This driver implements all the commands available to the MX25R chip series, but qspi is not supported yet.
 Note that the drivers are low level to allow the user to write custom implementation for it's needs.
 
 ## Usage
