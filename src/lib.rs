@@ -12,6 +12,7 @@
 //! * [MX25R6435F](https://www.macronix.com/Lists/Datasheet/Attachments/7913/MX25R6435F,%20Wide%20Range,%2064Mb,%20v1.5.pdf)
 
 pub mod address;
+pub mod asynchronous;
 pub mod blocking;
 mod command;
 pub mod error;

@@ -15,18 +15,18 @@ use embassy_nrf::{
     spim::{self, Spim},
     Peripherals,
 };
-use embedded_hal::spi::blocking::ExclusiveDevice;
+use embedded_hal_async::spi::ExclusiveDevice;
 use mx25r::{
     address::{Address, Page, Sector},
-    blocking::MX25R6435F,
+    asynchronous::AsyncMX25R6435F,
     error::Error,
 };
 use panic_probe as _;
 
-type DkMX25R<'a> = MX25R6435F<ExclusiveDevice<Spim<'a, TWISPI0>, Output<'a, P0_17>>>;
+type DkMX25R<'a> = AsyncMX25R6435F<ExclusiveDevice<Spim<'a, TWISPI0>, Output<'a, P0_17>>>;
 
 async fn wait_wip(mx25r: &mut DkMX25R<'_>) {
-    while let Err(Error::Busy) = mx25r.poll_wip() {
+    while let Err(Error::Busy) = mx25r.poll_wip().await {
         Timer::after(Duration::from_millis(100)).await;
     }
 }
@@ -43,28 +43,28 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     let cs = Output::new(p.P0_17, Level::High, OutputDrive::Standard);
     let spi_dev = ExclusiveDevice::new(spi, cs);
 
-    let mut memory = MX25R6435F::new(spi_dev);
+    let mut memory = AsyncMX25R6435F::new(spi_dev);
 
     let mut buff = [0];
     let page = Page(0);
     let sector = Sector(0);
     let addr = Address::from_page(sector, page);
 
-    memory.read(addr, &mut buff).unwrap();
+    memory.read(addr, &mut buff).await.unwrap();
     info!("Value before erase {}", buff);
 
     info!("Erasing first sector");
-    memory.erase_sector(sector).unwrap();
+    memory.erase_sector(sector).await.unwrap();
     wait_wip(&mut memory).await;
 
-    memory.read(addr, &mut buff).unwrap();
+    memory.read(addr, &mut buff).await.unwrap();
     assert_eq!(buff[0], 0xff);
 
     info!("Writing 42");
-    memory.write_page(sector, page, &[42]).unwrap();
+    memory.write_page(sector, page, &[42]).await.unwrap();
     wait_wip(&mut memory).await;
 
-    memory.read(addr, &mut buff).unwrap();
+    memory.read(addr, &mut buff).await.unwrap();
     assert_eq!(buff[0], 42);
 
     // Exit
