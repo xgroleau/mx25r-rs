@@ -1,11 +1,11 @@
 use crate::{
     address::{self, Address, Block32, Block64, Page, Sector},
     command::Command,
-    register::*,
     error::Error,
+    register::*,
 };
 use bit::BitIndex;
-use embedded_hal::spi::blocking::{SpiBus, SpiBusRead, SpiBusWrite, SpiDevice, SpiBusFlush};
+use embedded_hal::spi::blocking::{SpiBus, SpiBusFlush, SpiBusRead, SpiBusWrite, SpiDevice};
 
 /// Type alias for the MX25R512F
 pub type MX25R512F<SPI> = MX25R<0x00FFFF, SPI>;
@@ -82,6 +82,15 @@ where
             .map_err(Error::Spi)
     }
 
+    fn write_read_base(&mut self, write: &[u8], read: &mut [u8]) -> Result<(), Error<E>> {
+        self.spi
+            .transaction(|bus| {
+                bus.write(write)?;
+                bus.read(read)
+            })
+            .map_err(Error::Spi)
+    }
+
     fn read_base(&mut self, addr: Address, cmd: Command, buff: &mut [u8]) -> Result<(), Error<E>> {
         let addr_val: u32 = Self::verify_addr(addr)?;
         let cmd: [u8; 4] = [
@@ -91,12 +100,7 @@ where
             addr_val as u8,
         ];
 
-        self.spi
-            .transaction(|bus| {
-                bus.write(&cmd)?;
-                bus.read(buff)
-            })
-            .map_err(Error::Spi)
+        self.write_read_base(&cmd, buff)
     }
 
     fn read_base_dummy(
@@ -115,12 +119,7 @@ where
             Command::Dummy as u8,
         ];
 
-        self.spi
-            .transaction(|bus| {
-                bus.write(&cmd)?;
-                bus.read(buff)
-            })
-            .map_err(Error::Spi)
+        self.write_read_base(&cmd, buff)
     }
 
     fn write_base(&mut self, addr: Address, cmd: Command, buff: &[u8]) -> Result<(), Error<E>> {
@@ -139,10 +138,10 @@ where
                 bus.flush()
             })
             .map_err(Error::Spi)?;
-            Ok(())
+        Ok(())
     }
 
-    fn prepare_write(&mut self) -> Result<(), Error<E>>{
+    fn prepare_write(&mut self) -> Result<(), Error<E>> {
         self.poll_wip()?;
         self.write_enable()
     }
@@ -215,7 +214,7 @@ where
     }
 
     /// Read the wip bit, just less noisy than the `read_status().unwrap().wip_bit`
-    pub fn poll_wip(&mut self) -> Result<(), Error<E>>{
+    pub fn poll_wip(&mut self) -> Result<(), Error<E>> {
         if self.read_status()?.wip_bit {
             return Err(Error::Busy);
         }
@@ -307,7 +306,7 @@ where
         Ok((ManufacturerId(command[4]), DeviceId(command[5])))
     }
 
-    /// Enter to access additionnal 8kB of secured memory, 
+    /// Enter to access additionnal 8kB of secured memory,
     /// which is independent of the main array. Note that it cannot be updated once locked down. See [`Self::write_security_register`]
     pub fn enter_secure_opt(&mut self) -> Result<(), Error<E>> {
         self.command_write(&[Command::EnterSecureOTP as u8])
@@ -365,7 +364,7 @@ mod es {
         NorFlashError, NorFlashErrorKind, ReadNorFlash,
     };
 
-    fn kind_to_error<E>(e: NorFlashErrorKind) -> Error<E>{
+    fn kind_to_error<E>(e: NorFlashErrorKind) -> Error<E> {
         match e {
             NorFlashErrorKind::NotAligned => Error::NotAligned,
             NorFlashErrorKind::OutOfBounds => Error::OutOfBounds,
