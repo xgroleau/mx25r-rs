@@ -365,14 +365,11 @@ mod es {
         NorFlashError, NorFlashErrorKind, ReadNorFlash,
     };
 
-    /// For check_read, check_erase and check_write
-    impl<E> From<NorFlashErrorKind> for Error<E> {
-        fn from(e: NorFlashErrorKind) -> Self {
-            match e {
-                NorFlashErrorKind::NotAligned => Error::NotAligned,
-                NorFlashErrorKind::OutOfBounds => Error::OutOfBounds,
-                _ => Error::Value,
-            }
+    fn kind_to_error<E>(e: NorFlashErrorKind) -> Error<E>{
+        match e {
+            NorFlashErrorKind::NotAligned => Error::NotAligned,
+            NorFlashErrorKind::OutOfBounds => Error::OutOfBounds,
+            _ => Error::Value,
         }
     }
 
@@ -409,7 +406,7 @@ mod es {
         const READ_SIZE: usize = 1;
 
         fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-            check_read(self, offset, bytes.len())?;
+            check_read(self, offset, bytes.len()).map_err(kind_to_error)?;
             if offset > SIZE {
                 return Err(Error::OutOfBounds);
             }
@@ -431,7 +428,7 @@ mod es {
         const ERASE_SIZE: usize = address::SECTOR_SIZE as usize;
 
         fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
-            check_erase(self, from, to)?;
+            check_erase(self, from, to).map_err(kind_to_error)?;
             let addr_diff = from - to;
             match addr_diff {
                 SECTOR_SIZE => {
@@ -451,7 +448,7 @@ mod es {
         }
 
         fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
-            check_write(self, offset, bytes.len())?;
+            check_write(self, offset, bytes.len()).map_err(kind_to_error)?;
             let sector_id = (offset / SECTOR_SIZE) as u16;
             let page_id = (offset / PAGE_SIZE) as u8;
             self.write_page(sector_id.into(), page_id.into(), bytes)
