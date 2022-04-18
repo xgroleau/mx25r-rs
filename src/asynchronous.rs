@@ -102,7 +102,7 @@ where
                         let res = bus.read(read).await;
                         (bus, res)
                     }
-                    Err(err) => (bus, Err(err))
+                    Err(err) => (bus, Err(err)),
                 }
             })
             .await
@@ -142,7 +142,6 @@ where
             Command::Dummy as u8,
         ];
 
-
         self.write_read_base(&cmd, buff).await
     }
 
@@ -168,7 +167,7 @@ where
                         let res = bus.write(buff).await;
                         (bus, res)
                     }
-                    Err(err) => (bus, Err(err))
+                    Err(err) => (bus, Err(err)),
                 }
             })
             .await

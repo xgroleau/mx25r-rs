@@ -57,14 +57,14 @@ async fn main(_spawner: Spawner, p: Peripherals) {
     memory.erase_sector(sector).unwrap();
     wait_wip(&mut memory).await;
 
-    memory.read_fast(addr, &mut buff).unwrap();
+    memory.read(addr, &mut buff).unwrap();
     assert_eq!(buff[0], 0xff);
 
     info!("Writing 42");
     memory.write_page(sector, page, &[42]).unwrap();
     wait_wip(&mut memory).await;
 
-    memory.read_fast(addr, &mut buff).unwrap();
+    memory.read(addr, &mut buff).unwrap();
     assert_eq!(buff[0], 42);
 
     // Exit
