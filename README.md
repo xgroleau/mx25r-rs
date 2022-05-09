@@ -1,9 +1,9 @@
 # mx25r-rs
-Platform-agnostic Rust driver for the macronix MX25R NOR flash using the [embedded-hal](https://github.com/rust-embedded/embedded-hal), note that this crate is still a **work in progress**.
+Platform-agnostic Rust driver for the macronix MX25R NOR flash using the [embedded-hal](https://github.com/rust-embedded/embedded-hal).
 
 
 This driver implements all the commands available to the MX25R chip series, but qspi is not supported yet.
-Note that the drivers are low level to allow the user to write custom implementation for it's needs.
+Note that the drivers are low level to allow the user to write custom implementation for its needs.
 
 ## Usage
 You can see an example of the usage for the `nRF52840-DK` in the [examples directory](./examples). For now only a blocking API is available.
