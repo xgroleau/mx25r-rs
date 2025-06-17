@@ -407,13 +407,19 @@ impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
             return Err(Error::NotAligned);
         }
 
+        // Make sure we are not busy
+        self.wait_wip().await?;
+
         // todo: smarter erase that does larger aligned erases if possible
         let mut idx = from;
         while idx < to {
             let sector = idx / erase_size;
             let sector = sector as u16;
-            self.wait_wip().await?;
             self.erase_sector(Sector(sector)).await?;
+
+            // Wait for the erase to complete, acting like a flush
+            self.wait_wip().await?;
+
             idx += erase_size;
         }
         Ok(())
@@ -431,6 +437,10 @@ impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
 
         let mut cursor = offset;
         let mut bytes = bytes;
+
+        // Ensure we are not busy
+        self.wait_wip().await?;
+
         while !bytes.is_empty() {
             // Is the START aligned to a page?
             let cursor_offset = cursor & (PAGE_SIZE - 1);
@@ -470,10 +480,12 @@ impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
                 }
             };
 
-            self.wait_wip().await?;
             self.prepare_write().await?;
             self.write_base(address, Command::ProgramPage, to_send)
                 .await?;
+
+            // Wait for the write to complete, to behave like a flush
+            self.wait_wip().await?;
         }
         // consumed all bytes to send
         Ok(())
