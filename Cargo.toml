@@ -20,21 +20,22 @@ exclude = [
 
 [dependencies]
 # TODO: Migrate to embedded-hal repo
-embedded-hal = { version = "1.0.0-alpha.7", git = "https://github.com/embassy-rs/embedded-hal", branch = "embassy2" }
-embedded-hal-async = { version = "0.0.1", git = "https://github.com/embassy-rs/embedded-hal", branch = "embassy2" }
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
 bit = "0.1.1"
 defmt = { version = "0.3", optional = true }
-embedded-storage = "0.3.0"
+embedded-storage-async = "0.4.1"
+embassy-futures = "0.1.1"
 
-[dev-dependencies]
-cortex-m = "0.7.3"
-cortex-m-rt = "0.7.0"
-embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nightly", "unstable-traits"] }
-embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-traits", "nightly"] }
+# [dev-dependencies]
+# cortex-m = "0.7.3"
+# cortex-m-rt = "0.7.0"
+# embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nightly", "unstable-traits"] }
+# embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-traits", "nightly"] }
 
-defmt = "0.3"
-defmt-rtt = "0.3"
-panic-probe = { version = "0.3", features = ["print-defmt"] }
+# defmt = "0.3"
+# defmt-rtt = "0.3"
+# panic-probe = { version = "0.3", features = ["print-defmt"] }
 
 [profile.release]
 lto = true
