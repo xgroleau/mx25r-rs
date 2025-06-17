@@ -3,6 +3,7 @@ use core::fmt::Debug;
 use embedded_storage_async::nor_flash::{NorFlashErrorKind, NorFlashError};
 
 /// All possible errors emitted by the driver
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Clone, Copy)]
 pub enum Error<SpiError> {
     /// Internal Spi error

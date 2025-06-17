@@ -6,6 +6,7 @@ use crate::{
 };
 use bit::BitIndex;
 use embassy_futures::yield_now;
+use embedded_hal::spi::Operation;
 use embedded_hal_async::spi::SpiDevice;
 use embedded_storage_async::nor_flash::{MultiwriteNorFlash, NorFlash, ReadNorFlash};
 
@@ -53,7 +54,7 @@ where
         Self { spi }
     }
 
-    async fn wait_wip(&mut self) -> Result<(), Error<E>> {
+    pub async fn wait_wip(&mut self) -> Result<(), Error<E>> {
         loop {
             let res = self.poll_wip().await;
             match res {
@@ -91,8 +92,10 @@ where
     }
 
     async fn write_read_base(&mut self, write: &[u8], read: &mut [u8]) -> Result<(), Error<E>> {
-        self.spi.write(write).await.map_err(Error::Spi)?;
-        self.spi.read(read).await.map_err(Error::Spi)
+        self.spi.transaction(&mut [
+            Operation::Write(write),
+            Operation::Read(read),
+        ]).await.map_err(Error::Spi)
     }
 
     async fn read_base(
@@ -101,6 +104,7 @@ where
         cmd: Command,
         buff: &mut [u8],
     ) -> Result<(), Error<E>> {
+        self.wait_wip().await?;
         let addr_val: u32 = Self::verify_addr(addr)?;
         let cmd: [u8; 4] = [
             cmd as u8,
@@ -109,7 +113,14 @@ where
             addr_val as u8,
         ];
 
-        self.write_read_base(&cmd, buff).await
+        let res = self.write_read_base(&cmd, buff).await;
+        #[cfg(feature = "defmt")]
+        if res.is_ok() {
+            defmt::info!("Read from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
+        } else {
+            defmt::error!("ERROR READ");
+        }
+        res
     }
 
     async fn read_base_dummy(
@@ -127,8 +138,14 @@ where
             addr_val as u8,
             Command::Dummy as u8,
         ];
-
-        self.write_read_base(&cmd, buff).await
+        let res = self.write_read_base(&cmd, buff).await;
+        #[cfg(feature = "defmt")]
+        if res.is_ok() {
+            defmt::trace!("ReadF from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
+        } else {
+            defmt::error!("ERROR READ");
+        }
+        res
     }
 
     async fn write_base(
@@ -145,8 +162,10 @@ where
             addr_val as u8,
         ];
 
-        self.spi.write(&cmd).await.map_err(Error::Spi)?;
-        self.spi.write(buff).await.map_err(Error::Spi)
+        self.spi.transaction(&mut [
+            Operation::Write(&cmd),
+            Operation::Write(buff),
+        ]).await.map_err(Error::Spi)
     }
 
     async fn prepare_write(&mut self) -> Result<(), Error<E>> {
@@ -380,7 +399,7 @@ impl<const SIZE: u32, SPI: SpiDevice> ReadNorFlash for AsyncMX25R<SIZE, SPI> {
     const READ_SIZE: usize = 1;
 
     async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        self.read(Address(offset), bytes).await
+        self.read_fast(Address(offset), bytes).await
     }
 
     fn capacity(&self) -> usize {
@@ -415,6 +434,8 @@ impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
         while idx < to {
             let sector = idx / erase_size;
             let sector = sector as u16;
+            #[cfg(feature = "defmt")]
+            defmt::warn!("Erase sector {:?}", sector);
             self.erase_sector(Sector(sector)).await?;
 
             // Wait for the erase to complete, acting like a flush
@@ -480,6 +501,8 @@ impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
                 }
             };
 
+            #[cfg(feature = "defmt")]
+            defmt::info!("Write to {=u32} len {=usize}: {:?}", address.0, to_send.len(), to_send);
             self.prepare_write().await?;
             self.write_base(address, Command::ProgramPage, to_send)
                 .await?;
