@@ -7,17 +7,29 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+      flake-utils,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-
-        rustpkg = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-      in with pkgs; {
+        rustpkg = pkgs.rust-bin.stable."1.87.0".default;
+      in
+      with pkgs;
+      {
         devShell = mkShell {
-          buildInputs =
-            [ cargo-flash flip-link probe-rs-cli probe-run rustpkg ];
+          buildInputs = [
+            probe-rs-tools
+            rustpkg
+          ];
         };
-      });
+      }
+    );
 }
