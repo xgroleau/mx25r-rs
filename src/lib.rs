@@ -13,7 +13,29 @@
 
 pub mod address;
 pub mod asynchronous;
-// pub mod blocking;
+pub mod blocking;
 mod command;
 pub mod error;
 pub mod register;
+
+use crate::error::Error;
+
+pub(crate) fn check_erase<E>(capacity: usize, from: u32, to: u32) -> Result<(), Error<E>> {
+    let capacity = capacity as u32;
+    if from > to || to > capacity {
+        return Err(Error::OutOfBounds);
+    }
+    if from % address::SECTOR_SIZE != 0 || to % address::SECTOR_SIZE != 0 {
+        return Err(Error::NotAligned);
+    }
+    Ok(())
+}
+
+pub(crate) fn check_write<E>(capacity: usize, offset: u32, length: usize) -> Result<(), Error<E>> {
+    let capacity = capacity as u32;
+    let length = length as u32;
+    if length > capacity || offset > capacity - length {
+        return Err(Error::OutOfBounds);
+    }
+    Ok(())
+}

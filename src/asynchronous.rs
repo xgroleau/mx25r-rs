@@ -1,5 +1,5 @@
 use crate::{
-    address::{Address, Block32, Block64, Page, Sector, PAGE_SIZE},
+    address::{Address, Block32, Block64, Page, Sector},
     command::Command,
     error::Error,
     register::*,
@@ -8,7 +8,6 @@ use bit::BitIndex;
 use embassy_futures::yield_now;
 use embedded_hal::spi::Operation;
 use embedded_hal_async::spi::SpiDevice;
-use embedded_storage_async::nor_flash::{MultiwriteNorFlash, NorFlash, ReadNorFlash};
 
 /// Type alias for the AsyncMX25R512F
 pub type AsyncMX25R512F<SPI> = AsyncMX25R<0x00FFFF, SPI>;
@@ -46,12 +45,18 @@ impl<const SIZE: u32, SPI, E> AsyncMX25R<SIZE, SPI>
 where
     SPI: SpiDevice<Error = E>,
 {
-    pub const fn capacity() -> usize {
-        SIZE as usize + 1
-    }
+    pub const CAPACITY: usize = SIZE as usize + 1;
 
     pub fn new(spi: SPI) -> Self {
         Self { spi }
+    }
+
+    /// Read the wip bit, just less noisy than the `read_status().unwrap().wip_bit`
+    pub async fn poll_wip(&mut self) -> Result<(), Error<E>> {
+        if self.read_status().await?.wip_bit {
+            return Err(Error::Busy);
+        }
+        Ok(())
     }
 
     pub async fn wait_wip(&mut self) -> Result<(), Error<E>> {
@@ -92,10 +97,10 @@ where
     }
 
     async fn write_read_base(&mut self, write: &[u8], read: &mut [u8]) -> Result<(), Error<E>> {
-        self.spi.transaction(&mut [
-            Operation::Write(write),
-            Operation::Read(read),
-        ]).await.map_err(Error::Spi)
+        self.spi
+            .transaction(&mut [Operation::Write(write), Operation::Read(read)])
+            .await
+            .map_err(Error::Spi)
     }
 
     async fn read_base(
@@ -130,6 +135,7 @@ where
         buff: &mut [u8],
     ) -> Result<(), Error<E>> {
         let addr_val: u32 = Self::verify_addr(addr)?;
+        self.wait_wip().await?;
 
         let cmd: [u8; 5] = [
             cmd as u8,
@@ -162,14 +168,28 @@ where
             addr_val as u8,
         ];
 
-        self.spi.transaction(&mut [
-            Operation::Write(&cmd),
-            Operation::Write(buff),
-        ]).await.map_err(Error::Spi)
+        let res = self
+            .spi
+            .transaction(&mut [Operation::Write(&cmd), Operation::Write(buff)])
+            .await
+            .map_err(Error::Spi);
+
+        #[cfg(feature = "defmt")]
+        if res.is_ok() {
+            defmt::trace!(
+                "write from {=u32}, {=usize}: {:?}",
+                addr.0,
+                buff.len(),
+                buff
+            );
+        } else {
+            defmt::trace!("Failed to write");
+        }
+        res
     }
 
     async fn prepare_write(&mut self) -> Result<(), Error<E>> {
-        self.poll_wip().await?;
+        self.wait_wip().await?;
         self.write_enable().await
     }
 
@@ -199,27 +219,39 @@ where
     pub async fn erase_sector(&mut self, sector: Sector) -> Result<(), Error<E>> {
         let addr = Address::from_sector(sector);
         self.prepare_write().await?;
-        self.addr_command(addr, Command::SectorErase).await
+        self.addr_command(addr, Command::SectorErase).await?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase sector {:?}", sector);
+        Ok(())
     }
 
     /// Erase a 64kB block. [`Self::write_enable`] is called internally
     pub async fn erase_block64(&mut self, block: Block64) -> Result<(), Error<E>> {
         let addr = Address::from_block64(block);
         self.prepare_write().await?;
-        self.addr_command(addr, Command::BlockErase).await
+        self.addr_command(addr, Command::BlockErase).await?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase block 64 {:?}", block);
+        Ok(())
     }
 
     /// Erase a 32kB block. [`Self::write_enable`] is called internally
     pub async fn erase_block32(&mut self, block: Block32) -> Result<(), Error<E>> {
         let addr = Address::from_block32(block);
         self.prepare_write().await?;
-        self.addr_command(addr, Command::BlockErase32).await
+        self.addr_command(addr, Command::BlockErase32).await?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase block 32 {:?}", block);
+        Ok(())
     }
 
     /// Erase the whole chip. [`Self::write_enable`] is called internally
     pub async fn erase_chip(&mut self) -> Result<(), Error<E>> {
         self.prepare_write().await?;
-        self.command_write(&[Command::ChipErase as u8]).await
+        self.command_write(&[Command::ChipErase as u8]).await?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase chip");
+        Ok(())
     }
 
     /// Read using the Serial Flash Discoverable Parameter instruction
@@ -243,14 +275,6 @@ where
 
         self.command_transfer(&mut command).await?;
         Ok(command[1].into())
-    }
-
-    /// Read the wip bit, just less noisy than the `read_status().unwrap().wip_bit`
-    pub async fn poll_wip(&mut self) -> Result<(), Error<E>> {
-        if self.read_status().await?.wip_bit {
-            return Err(Error::Busy);
-        }
-        Ok(())
     }
 
     /// Read the configuration register
@@ -389,130 +413,95 @@ where
     }
 }
 
-impl<const SIZE: u32, SPI: SpiDevice> embedded_storage_async::nor_flash::ErrorType
-    for AsyncMX25R<SIZE, SPI>
-{
-    type Error = Error<SPI::Error>;
-}
+/// Implementation of the [`NorFlash`](embedded_storage::nor_flash) trait of the  crate
+mod es {
 
-impl<const SIZE: u32, SPI: SpiDevice> ReadNorFlash for AsyncMX25R<SIZE, SPI> {
-    const READ_SIZE: usize = 1;
+    use crate::address::{
+        Block32, Block64, Sector, BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE,
+    };
+    use crate::{address, check_erase, check_write};
+    use crate::{address::Address, error::Error};
+    use embedded_hal_async::spi::SpiDevice;
+    use embedded_storage_async::nor_flash::{MultiwriteNorFlash, NorFlash, ReadNorFlash};
 
-    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        self.read_fast(Address(offset), bytes).await
+    use super::AsyncMX25R;
+
+    impl<const SIZE: u32, SPI: SpiDevice> embedded_storage_async::nor_flash::ErrorType
+        for AsyncMX25R<SIZE, SPI>
+    {
+        type Error = Error<SPI::Error>;
     }
 
-    fn capacity(&self) -> usize {
-        Self::capacity()
-    }
-}
+    impl<const SIZE: u32, SPI: SpiDevice> ReadNorFlash for AsyncMX25R<SIZE, SPI> {
+        const READ_SIZE: usize = 1;
 
-impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
-    const WRITE_SIZE: usize = 1;
-
-    const ERASE_SIZE: usize = 4096;
-
-    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
-        let erase_size = Self::ERASE_SIZE as u32;
-        if from >= to {
-            return Err(Error::OutOfBounds);
-        }
-        if (from & (erase_size - 1)) != 0 {
-            return Err(Error::NotAligned);
+        async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+            self.read_fast(Address(offset), bytes).await
         }
 
-        let to_erase = to - from;
-        if (to_erase & (erase_size - 1)) != 0 {
-            return Err(Error::NotAligned);
+        fn capacity(&self) -> usize {
+            Self::CAPACITY
         }
-
-        // Make sure we are not busy
-        self.wait_wip().await?;
-
-        // todo: smarter erase that does larger aligned erases if possible
-        let mut idx = from;
-        while idx < to {
-            let sector = idx / erase_size;
-            let sector = sector as u16;
-            #[cfg(feature = "defmt")]
-            defmt::trace!("Erase sector {:?}", sector);
-            self.erase_sector(Sector(sector)).await?;
-
-            // Wait for the erase to complete, acting like a flush
-            self.wait_wip().await?;
-
-            idx += erase_size;
-        }
-        Ok(())
     }
 
-    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
-        let to_write = bytes.len();
-        let to_write = to_write as u32;
-        let Some(end) = offset.checked_add(to_write) else {
-            return Err(Error::OutOfBounds);
-        };
-        if end > (Self::capacity() as u32) {
-            return Err(Error::OutOfBounds);
+    impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
+        const WRITE_SIZE: usize = 1;
+        const ERASE_SIZE: usize = address::SECTOR_SIZE as usize;
+
+        async fn erase(&mut self, mut from: u32, to: u32) -> Result<(), Self::Error> {
+            check_erase(self.capacity(), from, to)?;
+
+            while from < to {
+                self.wait_wip().await?;
+                let addr_diff = from - to;
+                match addr_diff {
+                    SECTOR_SIZE => {
+                        let sector = Sector((from / SECTOR_SIZE) as u16);
+                        self.erase_sector(sector).await
+                    }
+                    BLOCK32_SIZE => {
+                        let block = Block32((from / BLOCK32_SIZE) as u16);
+                        self.erase_block32(block).await
+                    }
+                    BLOCK64_SIZE => {
+                        let block = Block64((from / BLOCK64_SIZE) as u16);
+                        self.erase_block64(block).await
+                    }
+                    _ => Err(Error::NotAligned),
+                }?;
+                from += addr_diff;
+            }
+            Ok(())
         }
 
-        let mut cursor = offset;
-        let mut bytes = bytes;
+        async fn write(&mut self, mut offset: u32, mut bytes: &[u8]) -> Result<(), Self::Error> {
+            check_write(self.capacity(), offset, bytes.len())?;
 
-        // Ensure we are not busy
-        self.wait_wip().await?;
-
-        while !bytes.is_empty() {
-            // Is the START aligned to a page?
-            let cursor_offset = cursor & (PAGE_SIZE - 1);
-            let cursor_aligned = cursor_offset == 0;
-
-            let address = Address(cursor);
-
-            // Decide how much to send. If we are aligned, we can send up to a
-            // whole page. If we are not aligned, we can only send the bytes remaining
-            // in the current page.
-            let to_send = if cursor_aligned {
-                // Can we get a whole slice?
-                if let Some((now, later)) = bytes.split_at_checked(PAGE_SIZE as usize) {
-                    cursor += PAGE_SIZE;
-                    bytes = later;
-                    now
-                } else {
-                    // No, we have less than a page left.
-                    cursor = end;
-                    core::mem::take(&mut bytes)
-                }
-            } else {
-                // we want to take the lesser of the rest of the size of the page,
-                // and the remaining data
-                let page_remain = PAGE_SIZE - cursor_offset;
-
-                // Do we have a full remainder of the page?
-                if let Some((now, later)) = bytes.split_at_checked(page_remain as usize) {
-                    // yes!
-                    cursor += now.len() as u32;
-                    bytes = later;
-                    now
-                } else {
-                    // No, we have less than a page left.
-                    cursor = end;
-                    core::mem::take(&mut bytes)
-                }
-            };
-
-            #[cfg(feature = "defmt")]
-            defmt::trace!("Write to {=u32} len {=usize}: {:?}", address.0, to_send.len(), to_send);
-            self.prepare_write().await?;
-            self.write_base(address, Command::ProgramPage, to_send)
+            // Write first chunk, taking into account that given addres might
+            // point to a location that is not on a page boundary,
+            let chunk_len = (PAGE_SIZE - (offset & 0x000000FF)) as usize;
+            let mut chunk_len = chunk_len.min(bytes.len());
+            let sector_id = (offset / SECTOR_SIZE) as u16;
+            let page_id = (offset.wrapping_div(PAGE_SIZE)) as u8;
+            self.write_page(sector_id.into(), page_id.into(), &bytes[..chunk_len])
                 .await?;
 
-            // Wait for the write to complete, to behave like a flush
-            self.wait_wip().await?;
-        }
-        // consumed all bytes to send
-        Ok(())
-    }
-}
+            loop {
+                bytes = &bytes[chunk_len..];
+                offset += chunk_len as u32;
+                chunk_len = bytes.len().min(PAGE_SIZE as usize);
+                if chunk_len == 0 {
+                    break;
+                }
+                let sector_id = (offset / SECTOR_SIZE) as u16;
+                let page_id = (offset / PAGE_SIZE) as u8;
+                self.write_page(sector_id.into(), page_id.into(), &bytes[..chunk_len])
+                    .await?;
+            }
 
-impl<const SIZE: u32, SPI: SpiDevice> MultiwriteNorFlash for AsyncMX25R<SIZE, SPI> {}
+            Ok(())
+        }
+    }
+
+    impl<const SIZE: u32, SPI: SpiDevice> MultiwriteNorFlash for AsyncMX25R<SIZE, SPI> {}
+}

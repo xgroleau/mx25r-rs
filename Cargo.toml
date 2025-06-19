@@ -18,24 +18,35 @@ exclude = [
     ".envrc",
 ]
 
+
+[lib]
+test = false # Same as above, to make plain `cargo test` work instead of `cargo test --tests`
+bench = false
+
+[[test]]
+name = "examples"
+harness = false
+
 [dependencies]
-# TODO: Migrate to embedded-hal repo
-embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
+embedded-hal = "1"
+embedded-hal-async = "1.0"
 bit = "0.1.1"
-defmt = { version = "0.3", optional = true }
-embedded-storage-async = "0.4.1"
-embassy-futures = "0.1.1"
+defmt = { version = "1", optional = true }
+embedded-storage-async = "0.4"
+embedded-storage = "0.3"
+embassy-futures = "0.1"
 
-# [dev-dependencies]
-# cortex-m = "0.7.3"
-# cortex-m-rt = "0.7.0"
-# embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nightly", "unstable-traits"] }
-# embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-traits", "nightly"] }
+[dev-dependencies]
+embedded-test = { version = "0.6.2", features = ["embassy", "defmt", "panic-handler"] }
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core", "inline-asm"] }
+cortex-m-rt = "0.7.5"
+embassy-nrf = { version = "0.3.1",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "time"] }
+embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "defmt", "executor-interrupt", "executor-thread", "task-arena-size-65536"] }
+embassy-time = "0.4.0"
+embedded-hal-bus = { version = "0.3.0", features = ["async"] }
 
-# defmt = "0.3"
-# defmt-rtt = "0.3"
-# panic-probe = { version = "0.3", features = ["print-defmt"] }
+defmt = "1.0"
+defmt-rtt = "1.0"
 
-[profile.release]
-lto = true
+[package.metadata.docs.rs]
+all-features = true

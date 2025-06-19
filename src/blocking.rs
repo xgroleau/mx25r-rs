@@ -5,7 +5,7 @@ use crate::{
     register::*,
 };
 use bit::BitIndex;
-use embedded_hal::spi::blocking::{SpiBus, SpiBusFlush, SpiBusRead, SpiBusWrite, SpiDevice};
+use embedded_hal::spi::{Operation, SpiDevice};
 
 /// Type alias for the MX25R512F
 pub type MX25R512F<SPI> = MX25R<0x00FFFF, SPI>;
@@ -35,7 +35,6 @@ pub type MX25R6435F<SPI> = MX25R<0x7FFFFF, SPI>;
 pub struct MX25R<const SIZE: u32, SPI>
 where
     SPI: SpiDevice,
-    SPI::Bus: SpiBus,
 {
     spi: SPI,
 }
@@ -43,10 +42,31 @@ where
 impl<const SIZE: u32, SPI, E> MX25R<SIZE, SPI>
 where
     SPI: SpiDevice<Error = E>,
-    SPI::Bus: SpiBus,
 {
+    pub const CAPACITY: usize = SIZE as usize + 1;
+
     pub fn new(spi: SPI) -> Self {
         Self { spi }
+    }
+
+    /// Read the wip bit, just less noisy than the `read_status().unwrap().wip_bit`
+    /// Can be used if you want to use a custom sleep, the driver will block until it's ready if you don't handle it
+    pub fn poll_wip(&mut self) -> Result<(), Error<E>> {
+        if self.read_status()?.wip_bit {
+            return Err(Error::Busy);
+        }
+        Ok(())
+    }
+
+    fn wait_wip(&mut self) -> Result<(), Error<E>> {
+        loop {
+            let res = self.poll_wip();
+            match res {
+                Ok(()) => return Ok(()),
+                Err(Error::Busy) => continue,
+                err @ Err(_) => return err,
+            }
+        }
     }
 
     pub fn verify_addr(addr: Address) -> Result<u32, Error<E>> {
@@ -58,15 +78,11 @@ where
     }
 
     fn command_write(&mut self, bytes: &[u8]) -> Result<(), Error<E>> {
-        self.spi
-            .transaction(|bus| bus.write(bytes))
-            .map_err(Error::Spi)
+        self.spi.write(bytes).map_err(Error::Spi)
     }
 
     fn command_transfer(&mut self, bytes: &mut [u8]) -> Result<(), Error<E>> {
-        self.spi
-            .transaction(|bus| bus.transfer_in_place(bytes))
-            .map_err(Error::Spi)
+        self.spi.transfer_in_place(bytes).map_err(Error::Spi)
     }
 
     fn addr_command(&mut self, addr: Address, cmd: Command) -> Result<(), Error<E>> {
@@ -77,22 +93,19 @@ where
             (addr_val >> 8) as u8,
             addr_val as u8,
         ];
-        self.spi
-            .transaction(|bus| bus.write(&cmd))
-            .map_err(Error::Spi)
+        self.spi.write(&cmd).map_err(Error::Spi)
     }
 
     fn write_read_base(&mut self, write: &[u8], read: &mut [u8]) -> Result<(), Error<E>> {
         self.spi
-            .transaction(|bus| {
-                bus.write(write)?;
-                bus.read(read)
-            })
+            .transaction(&mut [Operation::Write(write), Operation::Read(read)])
             .map_err(Error::Spi)
     }
 
     fn read_base(&mut self, addr: Address, cmd: Command, buff: &mut [u8]) -> Result<(), Error<E>> {
+        self.wait_wip()?;
         let addr_val: u32 = Self::verify_addr(addr)?;
+
         let cmd: [u8; 4] = [
             cmd as u8,
             (addr_val >> 16) as u8,
@@ -100,7 +113,14 @@ where
             addr_val as u8,
         ];
 
-        self.write_read_base(&cmd, buff)
+        let res = self.write_read_base(&cmd, buff);
+        #[cfg(feature = "defmt")]
+        if res.is_ok() {
+            defmt::trace!("Read from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
+        } else {
+            defmt::trace!("Failed to read");
+        }
+        res
     }
 
     fn read_base_dummy(
@@ -110,6 +130,7 @@ where
         buff: &mut [u8],
     ) -> Result<(), Error<E>> {
         let addr_val: u32 = Self::verify_addr(addr)?;
+        self.wait_wip()?;
 
         let cmd: [u8; 5] = [
             cmd as u8,
@@ -119,7 +140,14 @@ where
             Command::Dummy as u8,
         ];
 
-        self.write_read_base(&cmd, buff)
+        let res = self.write_read_base(&cmd, buff);
+        #[cfg(feature = "defmt")]
+        if res.is_ok() {
+            defmt::trace!("Read from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
+        } else {
+            defmt::trace!("Failed to read");
+        }
+        res
     }
 
     fn write_base(&mut self, addr: Address, cmd: Command, buff: &[u8]) -> Result<(), Error<E>> {
@@ -131,18 +159,27 @@ where
             addr_val as u8,
         ];
 
-        self.spi
-            .transaction(|bus| {
-                bus.write(&cmd)?;
-                bus.write(buff)?;
-                bus.flush()
-            })
-            .map_err(Error::Spi)?;
-        Ok(())
+        let res = self
+            .spi
+            .transaction(&mut [Operation::Write(&cmd), Operation::Write(buff)])
+            .map_err(Error::Spi);
+
+        #[cfg(feature = "defmt")]
+        if res.is_ok() {
+            defmt::trace!(
+                "write from {=u32}, {=usize}: {:?}",
+                addr.0,
+                buff.len(),
+                buff
+            );
+        } else {
+            defmt::trace!("Failed to write");
+        }
+        res
     }
 
     fn prepare_write(&mut self) -> Result<(), Error<E>> {
-        self.poll_wip()?;
+        self.wait_wip()?;
         self.write_enable()
     }
 
@@ -167,27 +204,39 @@ where
     pub fn erase_sector(&mut self, sector: Sector) -> Result<(), Error<E>> {
         let addr = Address::from_sector(sector);
         self.prepare_write()?;
-        self.addr_command(addr, Command::SectorErase)
+        self.addr_command(addr, Command::SectorErase)?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase sector {:?}", sector);
+        Ok(())
     }
 
     /// Erase a 64kB block. [`Self::write_enable`] is called internally
     pub fn erase_block64(&mut self, block: Block64) -> Result<(), Error<E>> {
         let addr = Address::from_block64(block);
         self.prepare_write()?;
-        self.addr_command(addr, Command::BlockErase)
+        self.addr_command(addr, Command::BlockErase)?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase block 64 {:?}", block);
+        Ok(())
     }
 
     /// Erase a 32kB block. [`Self::write_enable`] is called internally
     pub fn erase_block32(&mut self, block: Block32) -> Result<(), Error<E>> {
         let addr = Address::from_block32(block);
         self.prepare_write()?;
-        self.addr_command(addr, Command::BlockErase32)
+        self.addr_command(addr, Command::BlockErase32)?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase block 32 {:?}", block);
+        Ok(())
     }
 
     /// Erase the whole chip. [`Self::write_enable`] is called internally
     pub fn erase_chip(&mut self) -> Result<(), Error<E>> {
         self.prepare_write()?;
-        self.command_write(&[Command::ChipErase as u8])
+        self.command_write(&[Command::ChipErase as u8])?;
+        #[cfg(feature = "defmt")]
+        defmt::trace!("Erase chip");
+        Ok(())
     }
 
     /// Read using the Serial Flash Discoverable Parameter instruction
@@ -211,14 +260,6 @@ where
 
         self.command_transfer(&mut command)?;
         Ok(command[1].into())
-    }
-
-    /// Read the wip bit, just less noisy than the `read_status().unwrap().wip_bit`
-    pub fn poll_wip(&mut self) -> Result<(), Error<E>> {
-        if self.read_status()?.wip_bit {
-            return Err(Error::Busy);
-        }
-        Ok(())
     }
 
     /// Read the configuration register
@@ -356,41 +397,15 @@ where
 /// Implementation of the [`NorFlash`](embedded_storage::nor_flash) trait of the  crate
 mod es {
     use crate::address::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
+    use crate::{check_erase, check_write};
 
     use super::*;
     use core::fmt::Debug;
-    use embedded_storage::nor_flash::{
-        check_erase, check_read, check_write, ErrorType, MultiwriteNorFlash, NorFlash,
-        NorFlashError, NorFlashErrorKind, ReadNorFlash,
-    };
-
-    fn kind_to_error<E>(e: NorFlashErrorKind) -> Error<E> {
-        match e {
-            NorFlashErrorKind::NotAligned => Error::NotAligned,
-            NorFlashErrorKind::OutOfBounds => Error::OutOfBounds,
-            _ => Error::Value,
-        }
-    }
-
-    impl<SpiError> NorFlashError for Error<SpiError>
-    where
-        SpiError: Debug,
-    {
-        fn kind(&self) -> NorFlashErrorKind {
-            match self {
-                Error::OutOfBounds => NorFlashErrorKind::OutOfBounds,
-                Error::NotAligned => NorFlashErrorKind::NotAligned,
-                Error::Value => NorFlashErrorKind::Other,
-                Error::Spi(_) => NorFlashErrorKind::Other,
-                Error::Busy => NorFlashErrorKind::Other,
-            }
-        }
-    }
+    use embedded_storage::nor_flash::{ErrorType, MultiwriteNorFlash, NorFlash, ReadNorFlash};
 
     impl<const SIZE: u32, SPI, E> ErrorType for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
-        SPI::Bus: SpiBus,
         E: Debug,
     {
         type Error = Error<E>;
@@ -399,65 +414,81 @@ mod es {
     impl<const SIZE: u32, SPI, E> ReadNorFlash for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
-        SPI::Bus: SpiBus,
         E: Debug,
     {
         const READ_SIZE: usize = 1;
 
         fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-            check_read(self, offset, bytes.len()).map_err(kind_to_error)?;
-            if offset > SIZE {
-                return Err(Error::OutOfBounds);
-            }
             self.read_fast(Address(offset), bytes)
         }
 
         fn capacity(&self) -> usize {
-            SIZE as usize
+            Self::CAPACITY
         }
     }
 
     impl<const SIZE: u32, SPI, E> NorFlash for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
-        SPI::Bus: SpiBus,
         E: Debug,
     {
-        const WRITE_SIZE: usize = address::PAGE_SIZE as usize;
+        const WRITE_SIZE: usize = 1;
         const ERASE_SIZE: usize = address::SECTOR_SIZE as usize;
 
-        fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
-            check_erase(self, from, to).map_err(kind_to_error)?;
-            let addr_diff = from - to;
-            match addr_diff {
-                SECTOR_SIZE => {
-                    let sector = Sector((from / SECTOR_SIZE) as u16);
-                    self.erase_sector(sector)
-                }
-                BLOCK32_SIZE => {
-                    let block = Block32((from / BLOCK32_SIZE) as u16);
-                    self.erase_block32(block)
-                }
-                BLOCK64_SIZE => {
-                    let block = Block64((from / BLOCK64_SIZE) as u16);
-                    self.erase_block64(block)
-                }
-                _ => Err(Error::NotAligned),
+        fn erase(&mut self, mut from: u32, to: u32) -> Result<(), Self::Error> {
+            check_erase(self.capacity(), from, to)?;
+            while from < to {
+                let addr_diff = from - to;
+                match addr_diff {
+                    SECTOR_SIZE => {
+                        let sector = Sector((from / SECTOR_SIZE) as u16);
+                        self.erase_sector(sector)
+                    }
+                    BLOCK32_SIZE => {
+                        let block = Block32((from / BLOCK32_SIZE) as u16);
+                        self.erase_block32(block)
+                    }
+                    BLOCK64_SIZE => {
+                        let block = Block64((from / BLOCK64_SIZE) as u16);
+                        self.erase_block64(block)
+                    }
+                    _ => Err(Error::NotAligned),
+                }?;
+                from += addr_diff;
             }
+            Ok(())
         }
 
-        fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
-            check_write(self, offset, bytes.len()).map_err(kind_to_error)?;
+        fn write(&mut self, mut offset: u32, mut bytes: &[u8]) -> Result<(), Self::Error> {
+            check_write(self.capacity(), offset, bytes.len())?;
+
+            // Write first chunk, taking into account that given addres might
+            // point to a location that is not on a page boundary,
+            let chunk_len = (PAGE_SIZE - (offset & 0x000000FF)) as usize;
+            let mut chunk_len = chunk_len.min(bytes.len());
             let sector_id = (offset / SECTOR_SIZE) as u16;
             let page_id = (offset / PAGE_SIZE) as u8;
-            self.write_page(sector_id.into(), page_id.into(), bytes)
+            self.write_page(sector_id.into(), page_id.into(), &bytes[..chunk_len])?;
+
+            loop {
+                bytes = &bytes[chunk_len..];
+                offset += chunk_len as u32;
+                chunk_len = bytes.len().min(PAGE_SIZE as usize);
+                if chunk_len == 0 {
+                    break;
+                }
+                let sector_id = (offset / SECTOR_SIZE) as u16;
+                let page_id = (offset / PAGE_SIZE) as u8;
+                self.write_page(sector_id.into(), page_id.into(), &bytes[..chunk_len])?;
+            }
+
+            Ok(())
         }
     }
 
     impl<const SIZE: u32, SPI, E> MultiwriteNorFlash for MX25R<SIZE, SPI>
     where
         SPI: SpiDevice<Error = E>,
-        SPI::Bus: SpiBus,
         E: Debug,
     {
     }
