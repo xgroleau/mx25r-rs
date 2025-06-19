@@ -20,7 +20,10 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        rustpkg = pkgs.rust-bin.stable."1.87.0".default;
+        rustpkg = pkgs.rust-bin.stable."1.87.0".default.override {
+          extensions = [ "rust-src" ];
+          targets = [ "thumbv7em-none-eabihf" ];
+        };
       in
       with pkgs;
       {
