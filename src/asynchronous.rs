@@ -116,9 +116,9 @@ where
         let res = self.write_read_base(&cmd, buff).await;
         #[cfg(feature = "defmt")]
         if res.is_ok() {
-            defmt::info!("Read from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
+            defmt::trace!("Read from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
         } else {
-            defmt::error!("ERROR READ");
+            defmt::trace!("Failed to read");
         }
         res
     }
@@ -141,9 +141,9 @@ where
         let res = self.write_read_base(&cmd, buff).await;
         #[cfg(feature = "defmt")]
         if res.is_ok() {
-            defmt::trace!("ReadF from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
+            defmt::trace!("Read from {=u32}, {=usize}: {:?}", addr.0, buff.len(), buff);
         } else {
-            defmt::error!("ERROR READ");
+            defmt::trace!("Failed to read");
         }
         res
     }
@@ -435,7 +435,7 @@ impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
             let sector = idx / erase_size;
             let sector = sector as u16;
             #[cfg(feature = "defmt")]
-            defmt::warn!("Erase sector {:?}", sector);
+            defmt::trace!("Erase sector {:?}", sector);
             self.erase_sector(Sector(sector)).await?;
 
             // Wait for the erase to complete, acting like a flush
@@ -502,7 +502,7 @@ impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
             };
 
             #[cfg(feature = "defmt")]
-            defmt::info!("Write to {=u32} len {=usize}: {:?}", address.0, to_send.len(), to_send);
+            defmt::trace!("Write to {=u32} len {=usize}: {:?}", address.0, to_send.len(), to_send);
             self.prepare_write().await?;
             self.write_base(address, Command::ProgramPage, to_send)
                 .await?;
