@@ -453,7 +453,7 @@ mod es {
 
             while from < to {
                 self.wait_wip().await?;
-                let addr_diff = from - to;
+                let addr_diff = to - from;
                 match addr_diff {
                     SECTOR_SIZE => {
                         let sector = Sector((from / SECTOR_SIZE) as u16);

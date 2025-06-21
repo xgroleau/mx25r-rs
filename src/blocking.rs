@@ -438,7 +438,7 @@ mod es {
         fn erase(&mut self, mut from: u32, to: u32) -> Result<(), Self::Error> {
             check_erase(self.capacity(), from, to)?;
             while from < to {
-                let addr_diff = from - to;
+                let addr_diff = to - from;
                 match addr_diff {
                     SECTOR_SIZE => {
                         let sector = Sector((from / SECTOR_SIZE) as u16);
