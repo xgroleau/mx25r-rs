@@ -13,28 +13,15 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
-      - run: ls -al
+      - uses: nicknovitski/nix-develop@v1
 
-      - name: Clippy check
-        run: nix develop --command \
-          cargo clippy
-
-      - name: Clippy check tests
-        run: nix develop --command \
-          cargo clippy --tests
-
-      - name: Run cargo fmt
-        run: nix develop --command \
-          cargo fmt --all -- --check
-
-      - name: Create doc
-        run: nix develop --command \
-          cargo doc --all-features
+      - run: cargo clippy
+      - run: cargo clippy --tests
+      - run: cargo fmt --all -- --check
+      - run: cargo test --all-features
+      - run: cargo doc --all-features
         env:
           RUSTDOCFLAGS: --cfg docsrs
-
-      - name: Run tests
-        run: nix develop --command \
-          cargo test --all-features
