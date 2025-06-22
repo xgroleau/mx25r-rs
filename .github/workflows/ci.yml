@@ -13,16 +13,9 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          components: clippy
-
-      - name: Cargo cache
-        uses: Swatinem/rust-cache@v2
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: nicknovitski/nix-develop@v1
 
       - name: Clippy check
         run: cargo clippy
@@ -30,52 +23,12 @@ jobs:
       - name: Clippy check tests
         run: cargo clippy --tests
 
-  fmt:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          components: rustfmt
-
-      - name: Cargo cache
-        uses: Swatinem/rust-cache@v2
-
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
-
-  Doc:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-
-      - name: Cargo cache
-        uses: Swatinem/rust-cache@v2
 
       - name: Create doc
         run: cargo doc --all-features
         env:
           RUSTDOCFLAGS: --cfg docsrs
 
-  Tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-
-      - name: Cargo cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Run tests
         run: cargo test --all-features
