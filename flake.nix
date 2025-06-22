@@ -27,7 +27,7 @@
       in
       with pkgs;
       {
-        devShell = mkShell {
+        devShells.default = mkShell {
           buildInputs = [
             probe-rs-tools
             rustpkg
