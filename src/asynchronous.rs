@@ -1,5 +1,5 @@
 use crate::{
-    address::{BLOCK64_SIZE, SECTOR_SIZE},
+    {BLOCK64_SIZE, SECTOR_SIZE},
     command::Command,
     error::Error,
     register::*,
@@ -410,9 +410,9 @@ where
 /// Implementation of the [`NorFlash`](embedded_storage::nor_flash) trait of the  crate
 mod es {
 
-    use crate::address::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
+    use crate::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
     use crate::error::Error;
-    use crate::{address, check_erase, check_write};
+    use crate::{check_erase, check_write};
     use embedded_hal_async::spi::SpiDevice;
     use embedded_storage_async::nor_flash::{MultiwriteNorFlash, NorFlash, ReadNorFlash};
 
@@ -438,7 +438,7 @@ mod es {
 
     impl<const SIZE: u32, SPI: SpiDevice> NorFlash for AsyncMX25R<SIZE, SPI> {
         const WRITE_SIZE: usize = 1;
-        const ERASE_SIZE: usize = address::SECTOR_SIZE as usize;
+        const ERASE_SIZE: usize = SECTOR_SIZE as usize;
 
         async fn erase(&mut self, mut from: u32, to: u32) -> Result<(), Self::Error> {
             check_erase(self.capacity(), from, to)?;

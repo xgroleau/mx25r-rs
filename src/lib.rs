@@ -11,21 +11,26 @@
 //! * [MX25R3235F](https://www.macronix.com/Lists/Datasheet/Attachments/7966/MX25R3235F,%20Wide%20Range,%2032Mb,%20v1.8.pdf)
 //! * [MX25R6435F](https://www.macronix.com/Lists/Datasheet/Attachments/7913/MX25R6435F,%20Wide%20Range,%2064Mb,%20v1.5.pdf)
 
-pub mod address;
 pub mod asynchronous;
-// pub mod blocking;
+pub mod blocking;
 mod command;
 pub mod error;
 pub mod register;
 
 use crate::error::Error;
 
+pub const BLOCK64_SIZE: u32 = 0x010000;
+pub const BLOCK32_SIZE: u32 = BLOCK64_SIZE / 2;
+
+pub const SECTOR_SIZE: u32 = 0x1000;
+pub const PAGE_SIZE: u32 = 0x100;
+
 pub(crate) fn check_erase<E>(capacity: usize, from: u32, to: u32) -> Result<(), Error<E>> {
     let capacity = capacity as u32;
     if from > to || to > capacity {
         return Err(Error::OutOfBounds);
     }
-    if from % address::SECTOR_SIZE != 0 || to % address::SECTOR_SIZE != 0 {
+    if from % SECTOR_SIZE != 0 || to % SECTOR_SIZE != 0 {
         return Err(Error::NotAligned);
     }
     Ok(())
