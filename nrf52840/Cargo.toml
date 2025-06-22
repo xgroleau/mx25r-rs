@@ -8,6 +8,10 @@ edition = "2021"
 name = "asynchronous"
 harness = false
 
+[[test]]
+name = "blocking"
+harness = false
+
 [dependencies]
 mx25r = { version = "0", path = "../", features = ["defmt"] }
 

@@ -427,22 +427,18 @@ mod es {
             while from < to {
                 self.wait_wip()?;
                 let addr_diff = to - from;
-                match addr_diff {
-                    SECTOR_SIZE => {
-                        let sector = from / SECTOR_SIZE;
-                        self.erase_sector(sector)
-                    }
-                    BLOCK32_SIZE => {
-                        let block = from / BLOCK32_SIZE;
-                        self.erase_block32(block)
-                    }
-                    BLOCK64_SIZE => {
-                        let block = from / BLOCK64_SIZE;
-                        self.erase_block64(block)
-                    }
-                    _ => Err(Error::NotAligned),
-                }?;
-                from += addr_diff;
+                if addr_diff % BLOCK64_SIZE == 0 {
+                    self.erase_block64(from)?;
+                    from += BLOCK64_SIZE;
+                } else if addr_diff % BLOCK32_SIZE == 0 {
+                    self.erase_block32(from)?;
+                    from += BLOCK32_SIZE;
+                } else if addr_diff % SECTOR_SIZE == 0 {
+                    self.erase_sector(from)?;
+                    from += SECTOR_SIZE;
+                } else {
+                    return Err(Error::NotAligned);
+                }
             }
             Ok(())
         }

@@ -1,8 +1,8 @@
 use crate::{
-    {BLOCK64_SIZE, SECTOR_SIZE},
     command::Command,
     error::Error,
     register::*,
+    {BLOCK64_SIZE, SECTOR_SIZE},
 };
 use bit::BitIndex;
 use embassy_futures::yield_now;
@@ -170,12 +170,7 @@ where
 
         #[cfg(feature = "defmt")]
         if res.is_ok() {
-            defmt::trace!(
-                "write from {=u32}, {=usize}: {:?}",
-                addr,
-                buff.len(),
-                buff
-            );
+            defmt::trace!("write from {=u32}, {=usize}: {:?}", addr, buff.len(), buff);
         } else {
             defmt::trace!("Failed to write");
         }
@@ -410,9 +405,9 @@ where
 /// Implementation of the [`NorFlash`](embedded_storage::nor_flash) trait of the  crate
 mod es {
 
-    use crate::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
     use crate::error::Error;
     use crate::{check_erase, check_write};
+    use crate::{BLOCK32_SIZE, BLOCK64_SIZE, PAGE_SIZE, SECTOR_SIZE};
     use embedded_hal_async::spi::SpiDevice;
     use embedded_storage_async::nor_flash::{MultiwriteNorFlash, NorFlash, ReadNorFlash};
 
@@ -446,22 +441,18 @@ mod es {
             while from < to {
                 self.wait_wip().await?;
                 let addr_diff = to - from;
-                match addr_diff {
-                    SECTOR_SIZE => {
-                        let sector = from / SECTOR_SIZE;
-                        self.erase_sector(sector).await
-                    }
-                    BLOCK32_SIZE => {
-                        let block = from / BLOCK32_SIZE;
-                        self.erase_block32(block).await
-                    }
-                    BLOCK64_SIZE => {
-                        let block = from / BLOCK64_SIZE;
-                        self.erase_block64(block).await
-                    }
-                    _ => Err(Error::NotAligned),
-                }?;
-                from += addr_diff;
+                if addr_diff % BLOCK64_SIZE == 0 {
+                    self.erase_block64(from).await?;
+                    from += BLOCK64_SIZE;
+                } else if addr_diff % BLOCK32_SIZE == 0 {
+                    self.erase_block32(from).await?;
+                    from += BLOCK32_SIZE;
+                } else if addr_diff % SECTOR_SIZE == 0 {
+                    self.erase_sector(from).await?;
+                    from += SECTOR_SIZE;
+                } else {
+                    return Err(Error::NotAligned);
+                }
             }
             Ok(())
         }
