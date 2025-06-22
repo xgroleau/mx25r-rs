@@ -15,21 +15,25 @@ jobs:
     steps:
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
-      - uses: nicknovitski/nix-develop@v1
 
       - name: Clippy check
-        run: cargo clippy
+        run: nix develop --command \
+          cargo clippy
 
       - name: Clippy check tests
-        run: cargo clippy --tests
+        run: nix develop --command \
+          cargo clippy --tests
 
       - name: Run cargo fmt
-        run: cargo fmt --all -- --check
+        run: nix develop --command \
+          cargo fmt --all -- --check
 
       - name: Create doc
-        run: cargo doc --all-features
+        run: nix develop --command \
+          cargo doc --all-features
         env:
           RUSTDOCFLAGS: --cfg docsrs
 
       - name: Run tests
-        run: cargo test --all-features
+        run: nix develop --command \
+          cargo test --all-features
