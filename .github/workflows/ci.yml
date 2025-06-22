@@ -4,6 +4,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: Check
@@ -35,6 +39,7 @@ jobs:
 
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
+        with:
           components: rustfmt
 
       - name: Cargo cache
