@@ -2,7 +2,7 @@
 name = "mx25r"
 version = "0.1.0"
 edition = "2021"
-authors = ["xgroleau <grox2901@usherbrooke.ca>"]
+authors = ["xgroleau <xavgroleau@gmail.com>"]
 repository = "https://github.com/xgroleau/mx25r-rs"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/xgroleau/mx25r-rs"
@@ -16,16 +16,9 @@ exclude = [
     "flake.nix",
     "flake.lock",
     ".envrc",
+    "nrf52840",
 ]
 
-
-[lib]
-test = false # Same as above, to make plain `cargo test` work instead of `cargo test --tests`
-bench = false
-
-[[test]]
-name = "examples"
-harness = false
 
 [dependencies]
 embedded-hal = "1"
@@ -35,18 +28,6 @@ defmt = { version = "1", optional = true }
 embedded-storage-async = "0.4"
 embedded-storage = "0.3"
 embassy-futures = "0.1"
-
-[dev-dependencies]
-embedded-test = { version = "0.6.2", features = ["embassy", "defmt", "panic-handler"] }
-cortex-m = { version = "0.7.7", features = ["critical-section-single-core", "inline-asm"] }
-cortex-m-rt = "0.7.5"
-embassy-nrf = { version = "0.3.1",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "time"] }
-embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "defmt", "executor-interrupt", "executor-thread", "task-arena-size-65536"] }
-embassy-time = "0.4.0"
-embedded-hal-bus = { version = "0.3.0", features = ["async"] }
-
-defmt = "1.0"
-defmt-rtt = "1.0"
 
 [package.metadata.docs.rs]
 all-features = true

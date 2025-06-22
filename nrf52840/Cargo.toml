@@ -1,0 +1,36 @@
+[package]
+name = "mx25r-nrf52840"
+version = "0.0.1"
+authors = [ "xgroleau <xavgroleau@gmail.com>" ]
+edition = "2021"
+
+
+[[test]]
+name = "asynchronous"
+harness = false
+
+[dependencies]
+mx25r = { version = "0", path = "../", features = ["defmt"] }
+
+embedded-hal = "1"
+embedded-hal-async = "1.0"
+bit = "0.1.1"
+embedded-storage-async = "0.4"
+embedded-storage = "0.3"
+embassy-futures = "0.1"
+
+embedded-test = { version = "0.6.2", features = ["embassy", "defmt", "panic-handler"] }
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core", "inline-asm"] }
+cortex-m-rt = "0.7.5"
+embassy-nrf = { version = "0.3.1",  features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "time"] }
+embassy-executor = { version = "0.7.0", features = ["arch-cortex-m", "defmt", "executor-interrupt", "executor-thread", "task-arena-size-65536"] }
+embassy-time = "0.4.0"
+embedded-hal-bus = { version = "0.3.0", features = ["async"] }
+
+defmt = "1.0"
+defmt-rtt = "1.0"
+
+panic-probe = { version = "1.0.0", features = ["defmt"] }
+
+[package.metadata.docs.rs]
+all-features = true

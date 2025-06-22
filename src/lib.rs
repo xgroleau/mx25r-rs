@@ -13,7 +13,7 @@
 
 pub mod address;
 pub mod asynchronous;
-pub mod blocking;
+// pub mod blocking;
 mod command;
 pub mod error;
 pub mod register;
