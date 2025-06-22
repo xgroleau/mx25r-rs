@@ -23,5 +23,3 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo test --all-features
       - run: cargo doc --all-features
-        env:
-          RUSTDOCFLAGS: --cfg docsrs
