@@ -1,6 +1,6 @@
 [package]
 name = "mx25r"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["xgroleau <xavgroleau@gmail.com>"]
 repository = "https://github.com/xgroleau/mx25r-rs"
